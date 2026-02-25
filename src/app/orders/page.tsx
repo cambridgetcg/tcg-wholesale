@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { orders } from "@/lib/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { orders, orderItems } from "@/lib/db/schema";
+import { eq, desc, count, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Nav from "@/components/Nav";
@@ -14,9 +14,33 @@ export default async function OrdersPage() {
   const clientId = parseInt(session.user.id);
   const isAdmin = session.user.role === "admin";
 
+  // Subquery for item counts
+  const itemCounts = db
+    .select({
+      orderId: orderItems.orderId,
+      itemCount: count(orderItems.id).as("item_count"),
+    })
+    .from(orderItems)
+    .groupBy(orderItems.orderId)
+    .as("item_counts");
+
+  const baseQuery = db
+    .select({
+      id: orders.id,
+      status: orders.status,
+      totalExVat: orders.totalExVat,
+      volumeDiscount: orders.volumeDiscount,
+      createdAt: orders.createdAt,
+      clientId: orders.clientId,
+      itemCount: sql<number>`coalesce(${itemCounts.itemCount}, 0)`.as("item_count"),
+    })
+    .from(orders)
+    .leftJoin(itemCounts, eq(orders.id, itemCounts.orderId))
+    .orderBy(desc(orders.createdAt));
+
   const allOrders = isAdmin
-    ? await db.select().from(orders).orderBy(desc(orders.createdAt))
-    : await db.select().from(orders).where(eq(orders.clientId, clientId)).orderBy(desc(orders.createdAt));
+    ? await baseQuery
+    : await baseQuery.where(eq(orders.clientId, clientId));
 
   return (
     <>
@@ -37,10 +61,11 @@ export default async function OrdersPage() {
             <thead className="bg-[#12121a]">
               <tr className="text-left text-gray-400">
                 <th className="px-4 py-3 font-medium">Order #</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3 font-medium text-right">Total (ex-VAT)</th>
-                <th className="px-4 py-3 font-medium text-right">Discount</th>
                 <th className="px-4 py-3 font-medium">Date</th>
+                <th className="px-4 py-3 font-medium text-right">Items</th>
+                <th className="px-4 py-3 font-medium text-right">Total (ex-VAT)</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e1e2e]">
@@ -51,15 +76,29 @@ export default async function OrdersPage() {
                       #{order.id}
                     </Link>
                   </td>
+                  <td className="px-4 py-3 text-gray-400">
+                    {new Date(order.createdAt ?? "").toLocaleDateString()}
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-400">{order.itemCount}</td>
+                  <td className="px-4 py-3 text-right font-medium">
+                    &pound;{order.totalExVat.toFixed(2)}
+                  </td>
                   <td className="px-4 py-3"><StatusBadge status={order.status} /></td>
-                  <td className="px-4 py-3 text-right font-medium">£{order.totalExVat.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right text-gray-400">{order.volumeDiscount}%</td>
-                  <td className="px-4 py-3 text-gray-400">{new Date(order.createdAt ?? "").toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-right">
+                    <Link
+                      href={`/orders/${order.id}`}
+                      className="text-brand-500 hover:underline text-xs"
+                    >
+                      View
+                    </Link>
+                  </td>
                 </tr>
               ))}
               {allOrders.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-gray-500">No orders yet</td>
+                  <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                    No orders yet
+                  </td>
                 </tr>
               )}
             </tbody>
