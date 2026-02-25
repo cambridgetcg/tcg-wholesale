@@ -5,7 +5,9 @@ import Link from "next/link";
 
 export default async function AdminDashboard() {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const monthStart = `${y}-${m}-01 00:00:00`;
 
   const allOrders = await db.select().from(orders);
   const activeClients = await db.select().from(clients).where(eq(clients.role, "client"));
