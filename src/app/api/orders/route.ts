@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
   for (const item of items) {
     const [card] = await db.select().from(cards).where(eq(cards.id, item.cardId)).limit(1);
     if (!card) continue;
-    const unitPrice = applyVolumeDiscount(card.priceExVat, discountPct);
+    const unitPrice = applyVolumeDiscount(card.priceExVat ?? 0, discountPct);
     const lineTotal = Math.round(unitPrice * item.quantity * 100) / 100;
     subtotal += lineTotal;
     resolvedItems.push({ cardId: item.cardId, quantity: item.quantity, unitPriceExVat: unitPrice, lineTotal });

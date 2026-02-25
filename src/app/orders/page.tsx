@@ -54,7 +54,7 @@ export default async function OrdersPage() {
                   <td className="px-4 py-3"><StatusBadge status={order.status} /></td>
                   <td className="px-4 py-3 text-right font-medium">£{order.totalExVat.toFixed(2)}</td>
                   <td className="px-4 py-3 text-right text-gray-400">{order.volumeDiscount}%</td>
-                  <td className="px-4 py-3 text-gray-400">{new Date(order.createdAt).toLocaleDateString()}</td>
+                  <td className="px-4 py-3 text-gray-400">{new Date(order.createdAt ?? "").toLocaleDateString()}</td>
                 </tr>
               ))}
               {allOrders.length === 0 && (

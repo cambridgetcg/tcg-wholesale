@@ -42,7 +42,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       <main className="mx-auto max-w-7xl px-6 py-8">
         <h1 className="mb-2 text-2xl font-bold">Order #{order.id}</h1>
         <p className="mb-6 text-sm text-gray-400">
-          Created {new Date(order.createdAt).toLocaleString()}
+          Created {new Date(order.createdAt ?? "").toLocaleString()}
         </p>
 
         {/* Status timeline */}
