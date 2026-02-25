@@ -4,6 +4,7 @@ import { orders, orderItems, cards, clients } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { applyVolumeDiscount } from "@/lib/pricing";
+import { sendOrderEmail } from "@/lib/email/send-order-email";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
     resolvedItems.push({ cardId: item.cardId, quantity: item.quantity, unitPriceExVat: unitPrice, lineTotal });
   }
 
-  const now = new Date().toISOString();
+  const now = new Date();
   const [order] = await db
     .insert(orders)
     .values({
@@ -50,6 +51,13 @@ export async function POST(req: NextRequest) {
 
   for (const item of resolvedItems) {
     await db.insert(orderItems).values({ orderId: order.id, ...item });
+  }
+
+  // Notify admin of new order
+  try {
+    await sendOrderEmail(order.id, "new_order");
+  } catch {
+    // Email failure should not break order submission
   }
 
   return NextResponse.json(order);
