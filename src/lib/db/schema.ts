@@ -32,7 +32,9 @@ export const sets = sqliteTable("sets", {
   releaseDate: text("release_date"),
   sortOrder: integer("sort_order").default(0),
   active: integer("active", { mode: "boolean" }).default(true),
-});
+}, (table) => ({
+  gameCodeUnique: uniqueIndex("sets_game_code_idx").on(table.gameId, table.code),
+}));
 
 export const cards = sqliteTable("cards", {
   id: integer("id").primaryKey({ autoIncrement: true }),
