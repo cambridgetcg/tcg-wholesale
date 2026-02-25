@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const clients = sqliteTable("clients", {
@@ -39,8 +39,12 @@ export const orders = sqliteTable("orders", {
   totalExVat: real("total_ex_vat").notNull().default(0),
   volumeDiscount: real("volume_discount").notNull().default(0),
   notes: text("notes"),
+  adminNotes: text("admin_notes"),
+  quotedAt: text("quoted_at"),
+  quotedExpiresAt: text("quoted_expires_at"),
   createdAt: text("created_at").default(sql`(datetime('now'))`),
   updatedAt: text("updated_at").default(sql`(datetime('now'))`),
+  stockCheckedAt: text("stock_checked_at"),
 });
 
 export const orderItems = sqliteTable("order_items", {
@@ -49,7 +53,12 @@ export const orderItems = sqliteTable("order_items", {
   cardId: integer("card_id").notNull().references(() => cards.id),
   quantity: integer("quantity").notNull().default(1),
   unitPriceExVat: real("unit_price_ex_vat").notNull(),
+  originalUnitPrice: real("original_unit_price"),
   lineTotal: real("line_total").notNull(),
+  stockStatus: text("stock_status", {
+    enum: ["pending", "in_stock", "out_of_stock", "price_changed"],
+  }).notNull().default("pending"),
+  checkedPriceJpy: integer("checked_price_jpy"),
 });
 
 export const priceHistory = sqliteTable("price_history", {
@@ -58,7 +67,9 @@ export const priceHistory = sqliteTable("price_history", {
   date: text("date").notNull(),
   cardrushJpy: integer("cardrush_jpy").notNull(),
   gbpJpyRate: real("gbp_jpy_rate").notNull(),
-});
+}, (table) => ({
+  cardDateUnique: uniqueIndex("price_history_card_date_idx").on(table.cardId, table.date),
+}));
 
 export type Client = typeof clients.$inferSelect;
 export type Card = typeof cards.$inferSelect;
