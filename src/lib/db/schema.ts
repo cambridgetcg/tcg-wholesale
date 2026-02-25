@@ -14,6 +14,26 @@ export const clients = sqliteTable("clients", {
   createdAt: text("created_at").default(sql`(datetime('now'))`),
 });
 
+export const games = sqliteTable("games", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  imageUrl: text("image_url"),
+  sortOrder: integer("sort_order").default(0),
+  active: integer("active", { mode: "boolean" }).default(true),
+});
+
+export const sets = sqliteTable("sets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  gameId: integer("game_id").notNull().references(() => games.id),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  releaseDate: text("release_date"),
+  sortOrder: integer("sort_order").default(0),
+  active: integer("active", { mode: "boolean" }).default(true),
+});
+
 export const cards = sqliteTable("cards", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   cardNumber: text("card_number").notNull(),
@@ -28,6 +48,11 @@ export const cards = sqliteTable("cards", {
   priceExVat: real("price_ex_vat"),
   ebayItemNumber: text("ebay_item_number"),
   lastSyncedAt: text("last_synced_at"),
+  gameId: integer("game_id").references(() => games.id),
+  setId: integer("set_id").references(() => sets.id),
+  category: text("category", { enum: ["singles", "sealed"] }).notNull().default("singles"),
+  productType: text("product_type"),
+  imageUrl: text("image_url"),
 });
 
 export const orders = sqliteTable("orders", {
@@ -72,6 +97,8 @@ export const priceHistory = sqliteTable("price_history", {
 }));
 
 export type Client = typeof clients.$inferSelect;
+export type Game = typeof games.$inferSelect;
+export type GameSet = typeof sets.$inferSelect;
 export type Card = typeof cards.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
