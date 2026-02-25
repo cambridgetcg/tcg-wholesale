@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
+import { useCart } from "@/lib/cart-context";
 
 export default function Nav() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
+  const { itemCount, discountedTotal } = useCart();
 
   return (
     <nav className="border-b border-[#1e1e2e] bg-[#12121a] px-6 py-3">
@@ -23,6 +25,17 @@ export default function Nav() {
           {isAdmin && (
             <Link href="/admin" className="hover:text-brand-500 transition">
               Admin
+            </Link>
+          )}
+          {itemCount > 0 && (
+            <Link
+              href="/orders/new"
+              className="flex items-center gap-1.5 rounded bg-brand-600/20 border border-brand-600/30 px-3 py-1 text-brand-400 hover:bg-brand-600/30 transition"
+            >
+              <span>Cart ({itemCount})</span>
+              <span className="text-green-400 font-medium">
+                &pound;{discountedTotal.toFixed(2)}
+              </span>
             </Link>
           )}
           <span className="text-gray-500">{session?.user?.email}</span>
