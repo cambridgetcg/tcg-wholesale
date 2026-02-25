@@ -2,10 +2,10 @@ const colors: Record<string, string> = {
   draft: "bg-gray-600",
   submitted: "bg-blue-600",
   quoted: "bg-yellow-600",
-  confirmed: "bg-purple-600",
+  confirmed: "bg-orange-600",
   paid: "bg-green-600",
-  ordered: "bg-orange-600",
-  shipped: "bg-cyan-600",
+  ordered: "bg-purple-600",
+  shipped: "bg-indigo-600",
   delivered: "bg-emerald-600",
 };
 
