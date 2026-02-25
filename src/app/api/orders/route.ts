@@ -10,7 +10,10 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const clientId = parseInt(session.user.id);
-  const { items } = await req.json() as { items: { cardId: number; quantity: number }[] };
+  const { items, notes } = await req.json() as {
+    items: { cardId: number; quantity: number }[];
+    notes?: string;
+  };
 
   if (!items?.length) return NextResponse.json({ error: "No items" }, { status: 400 });
 
@@ -39,6 +42,7 @@ export async function POST(req: NextRequest) {
       status: "submitted",
       totalExVat: Math.round(subtotal * 100) / 100,
       volumeDiscount: discountPct,
+      notes: notes?.trim() || null,
       createdAt: now,
       updatedAt: now,
     })
