@@ -14,6 +14,7 @@ interface Order {
   notes: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  stockCheckedAt: string | null;
 }
 
 interface OrderItemRow {
@@ -21,15 +22,24 @@ interface OrderItemRow {
   cardId: number;
   cardNumber: string;
   cardName: string | null;
+  cardrushJpy: number | null;
+  cardrushUrl: string | null;
   quantity: number;
   unitPriceExVat: number;
   lineTotal: number;
 }
 
+interface EditableItem {
+  id: number;
+  unitPriceExVat: number;
+  quantity: number;
+  available: boolean;
+}
+
 const statusFilters = ["all", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"];
 
 const nextAction: Record<string, { label: string; next: string } | null> = {
-  submitted: { label: "Send Quote", next: "quoted" },
+  submitted: null, // Handled by the quote editor now
   quoted: { label: "Mark Confirmed", next: "confirmed" },
   confirmed: { label: "Mark Paid", next: "paid" },
   paid: { label: "Mark Ordered", next: "ordered" },
@@ -45,6 +55,11 @@ export default function AdminOrdersPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [items, setItems] = useState<Record<number, OrderItemRow[]>>({});
   const [loading, setLoading] = useState(true);
+
+  // Editable state for quote adjustments
+  const [editItems, setEditItems] = useState<Record<number, EditableItem[]>>({});
+  const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
+  const [sending, setSending] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     const res = await fetch("/api/admin/orders");
@@ -63,8 +78,63 @@ export default function AdminOrdersPage() {
     setExpandedId(orderId);
     if (!items[orderId]) {
       const res = await fetch(`/api/orders/${orderId}/items`);
-      const data = await res.json();
+      const data: OrderItemRow[] = await res.json();
       setItems((prev) => ({ ...prev, [orderId]: data }));
+      // Initialize editable state for submitted orders
+      const order = orders.find((o) => o.id === orderId);
+      if (order?.status === "submitted" && !editItems[orderId]) {
+        setEditItems((prev) => ({
+          ...prev,
+          [orderId]: data.map((item) => ({
+            id: item.id,
+            unitPriceExVat: item.unitPriceExVat,
+            quantity: item.quantity,
+            available: true,
+          })),
+        }));
+      }
+    }
+  }
+
+  function updateEditItem(orderId: number, itemId: number, field: keyof EditableItem, value: number | boolean) {
+    setEditItems((prev) => ({
+      ...prev,
+      [orderId]: prev[orderId].map((item) =>
+        item.id === itemId ? { ...item, [field]: value } : item
+      ),
+    }));
+  }
+
+  function getEditTotal(orderId: number): number {
+    const edits = editItems[orderId];
+    if (!edits) return 0;
+    return edits
+      .filter((e) => e.available)
+      .reduce((sum, e) => sum + Math.round(e.unitPriceExVat * e.quantity * 100) / 100, 0);
+  }
+
+  async function sendQuote(orderId: number) {
+    const edits = editItems[orderId];
+    if (!edits) return;
+    setSending(true);
+    try {
+      await fetch(`/api/orders/${orderId}/items`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: edits,
+          adminNotes: adminNotes[orderId] || "",
+        }),
+      });
+      // Refresh orders and clear edit state
+      setOrders((prev) => prev.map((o) =>
+        o.id === orderId ? { ...o, status: "quoted", totalExVat: getEditTotal(orderId) } : o
+      ));
+      setEditItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
+      setItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
+      setExpandedId(null);
+    } finally {
+      setSending(false);
     }
   }
 
@@ -133,9 +203,24 @@ export default function AdminOrdersPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-400">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "\u2014"}</td>
                   <td className="px-4 py-3 text-right font-medium">&pound;{order.totalExVat.toFixed(2)}</td>
-                  <td className="px-4 py-3"><StatusBadge status={order.status} /></td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={order.status} />
+                    {order.stockCheckedAt && (
+                      <span className="ml-2 text-xs text-green-500">
+                        Stock verified: {new Date(order.stockCheckedAt).toLocaleDateString()}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-2">
+                      {order.status === "submitted" && (
+                        <a
+                          href={`/admin/orders/${order.id}/stock-check`}
+                          className="rounded bg-blue-900/30 px-2 py-1 text-xs font-medium text-blue-400 hover:bg-blue-900/50 transition"
+                        >
+                          Check Stock
+                        </a>
+                      )}
                       {nextAction[order.status] && (
                         <button
                           onClick={() => updateStatus(order.id, nextAction[order.status]!.next)}
@@ -155,10 +240,124 @@ export default function AdminOrdersPage() {
                     </div>
                   </td>
                 </tr>
+
+                {/* Expanded detail — submitted orders get editable quote view */}
                 {expandedId === order.id && (
                   <tr>
                     <td colSpan={7} className="bg-[#0e0e16] px-8 py-4">
-                      {items[order.id] ? (
+                      {!items[order.id] ? (
+                        <span className="text-gray-500">Loading items...</span>
+                      ) : order.status === "submitted" && editItems[order.id] ? (
+                        /* ── Editable quote view for submitted orders ── */
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-gray-300">Adjust Quote</h3>
+                            <span className="text-xs text-gray-500">
+                              Edit prices and quantities, uncheck unavailable items
+                            </span>
+                          </div>
+
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="text-gray-500">
+                                <th className="py-1 text-left w-8">
+                                  <span title="Available">✓</span>
+                                </th>
+                                <th className="py-1 text-left">Card #</th>
+                                <th className="py-1 text-left">Name</th>
+                                <th className="py-1 text-right">CardRush ¥</th>
+                                <th className="py-1 text-right">Unit Price (£)</th>
+                                <th className="py-1 text-right">Qty</th>
+                                <th className="py-1 text-right">Line Total</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {items[order.id].map((item) => {
+                                const edit = editItems[order.id].find((e) => e.id === item.id)!;
+                                const lineTotal = Math.round(edit.unitPriceExVat * edit.quantity * 100) / 100;
+                                return (
+                                  <tr
+                                    key={item.id}
+                                    className={`border-t border-[#1e1e2e] ${!edit.available ? "opacity-40" : ""}`}
+                                  >
+                                    <td className="py-1">
+                                      <input
+                                        type="checkbox"
+                                        checked={edit.available}
+                                        onChange={(e) => updateEditItem(order.id, item.id, "available", e.target.checked)}
+                                        className="accent-brand-500"
+                                      />
+                                    </td>
+                                    <td className="py-1 font-mono text-brand-500">{item.cardNumber}</td>
+                                    <td className="py-1 text-gray-400">{item.cardName}</td>
+                                    <td className="py-1 text-right text-gray-500">
+                                      {item.cardrushJpy != null ? `¥${item.cardrushJpy.toLocaleString()}` : "—"}
+                                    </td>
+                                    <td className="py-1 text-right">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        value={edit.unitPriceExVat}
+                                        onChange={(e) => updateEditItem(order.id, item.id, "unitPriceExVat", parseFloat(e.target.value) || 0)}
+                                        disabled={!edit.available}
+                                        className="w-20 rounded bg-[#1a1a2e] border border-[#2a2a3e] px-2 py-0.5 text-right text-xs focus:border-brand-500 focus:outline-none disabled:opacity-40"
+                                      />
+                                    </td>
+                                    <td className="py-1 text-right">
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={edit.quantity}
+                                        onChange={(e) => updateEditItem(order.id, item.id, "quantity", parseInt(e.target.value) || 1)}
+                                        disabled={!edit.available}
+                                        className="w-14 rounded bg-[#1a1a2e] border border-[#2a2a3e] px-2 py-0.5 text-right text-xs focus:border-brand-500 focus:outline-none disabled:opacity-40"
+                                      />
+                                    </td>
+                                    <td className="py-1 text-right font-medium">
+                                      {edit.available ? `£${lineTotal.toFixed(2)}` : "—"}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t border-[#2a2a3e]">
+                                <td colSpan={6} className="py-2 text-right font-semibold text-gray-300">
+                                  Quoted Total (ex-VAT):
+                                </td>
+                                <td className="py-2 text-right font-bold text-green-400">
+                                  £{getEditTotal(order.id).toFixed(2)}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+
+                          {/* Admin notes */}
+                          <div>
+                            <label className="mb-1 block text-xs text-gray-500">Admin Notes (internal only)</label>
+                            <textarea
+                              value={adminNotes[order.id] || ""}
+                              onChange={(e) => setAdminNotes((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                              rows={2}
+                              className="w-full rounded bg-[#1a1a2e] border border-[#2a2a3e] px-3 py-2 text-xs focus:border-brand-500 focus:outline-none"
+                              placeholder="Internal notes about this order..."
+                            />
+                          </div>
+
+                          {/* Send Quote button */}
+                          <div className="flex justify-end">
+                            <button
+                              onClick={() => sendQuote(order.id)}
+                              disabled={sending || editItems[order.id].every((e) => !e.available)}
+                              className="rounded bg-brand-600 px-4 py-2 text-sm font-medium hover:bg-brand-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {sending ? "Sending..." : "Send Quote"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* ── Read-only items view for non-submitted orders ── */
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-gray-500">
@@ -167,6 +366,7 @@ export default function AdminOrdersPage() {
                               <th className="py-1 text-right">Unit Price</th>
                               <th className="py-1 text-right">Qty</th>
                               <th className="py-1 text-right">Line Total</th>
+                              <th className="py-1 text-left">CardRush</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -177,12 +377,18 @@ export default function AdminOrdersPage() {
                                 <td className="py-1 text-right">&pound;{item.unitPriceExVat.toFixed(2)}</td>
                                 <td className="py-1 text-right">{item.quantity}</td>
                                 <td className="py-1 text-right font-medium">&pound;{item.lineTotal.toFixed(2)}</td>
+                                <td className="py-1 text-left">
+                                  {item.cardrushUrl && (
+                                    <a href={item.cardrushUrl} target="_blank" rel="noopener noreferrer"
+                                       className="text-blue-400 hover:text-blue-300">
+                                      Check ↗
+                                    </a>
+                                  )}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
                         </table>
-                      ) : (
-                        <span className="text-gray-500">Loading items...</span>
                       )}
                     </td>
                   </tr>
