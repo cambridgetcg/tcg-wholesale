@@ -1,88 +1,149 @@
 # TCG Wholesale — Price Feed & Order System
 
-Wholesale ordering system for UK streamer clients. Sources cards from CardRush Japan (and alternatives), applies landing cost markup, and presents a GBP price feed for clients to order from.
+Wholesale ordering platform for UK streamer clients. Sources Japanese One Piece TCG cards from CardRush, applies landed cost markup, presents VAT-exclusive GBP prices. Clients submit orders, we verify stock, confirm quotes, and fulfil.
 
 ## Business Flow
 
 ```
-CardRush (JPY prices) → Landing Cost Calculator → GBP Price Feed → Client Orders
-                                                                        ↓
-                                          Stock Check (CardRush/alt) ← Admin Review
-                                                                        ↓
-                                                              Quote Confirmation → Payment → Fulfil
+CardRush (JPY) ──→ AWS Pipeline ──→ S3 Price Feed ──→ Web App (GBP ex-VAT)
+                                                           │
+                                                    Client browses
+                                                    Selects cards + qty
+                                                    Submits order request
+                                                           │
+                                               Admin reviews ──→ Stock check
+                                                           │
+                                                  Quote confirmed ──→ Client pays
+                                                           │
+                                                  Order placed ──→ Ship JP→UK ──→ Deliver
 ```
 
-## Core Features
+## Pricing Model
 
-### 1. Price Feed
-- Card number + name + GBP price (marked up from JPY source)
-- Landing cost formula: `(JPY price × JPY/GBP rate) + shipping allocation + customs duty + margin`
-- Searchable by card number, set, name
-- Updated periodically from source
+### Landing Cost Formula
+```
+base_gbp      = cardrush_jpy / gbp_jpy_rate
+shipping      = base_gbp × 0.05            # 5% shipping & handling
+landed_cost   = base_gbp + shipping
+margin        = landed_cost × 0.20          # 20% net margin
+price_ex_vat  = landed_cost + margin        # displayed to client
+vat           = price_ex_vat × 0.20         # 20% VAT (invoiced separately)
+price_inc_vat = price_ex_vat + vat          # total if needed
+```
 
-### 2. Client Ordering
-- Client browses price feed
-- Selects cards + quantities
-- Submits order request (not a purchase — a quote request)
+**Example:** OP01-001 @ ¥17,800 / 208.53 rate
+- Base GBP: £85.37
+- Shipping (5%): £4.27
+- Landed: £89.64
+- Margin (20%): £17.93
+- **Price ex-VAT: £107.57** ← shown to client
+- VAT invoice: £21.51
+- Total inc VAT: £129.08
 
-### 3. Admin: Stock Check & Quote
-- Admin receives order request
-- Checks stock on CardRush / alternatives
-- Confirms availability + final quote (prices may shift)
-- Sends quote to client
+### Volume Discount (Tiered, based on prior month spend)
+| Monthly Spend | Discount |
+|---------------|----------|
+| < £10,000     | 0%       |
+| £10,000+      | 2%       |
+| £20,000+      | 4%       |
+| £30,000+      | 6%       |
+| £40,000+      | 8%       |
+| £50,000+      | 10%      |
 
-### 4. Payment & Fulfilment
-- Client pays confirmed quote
-- Admin places order with source
-- Tracks shipment from Japan → UK
-- Notifies client on arrival, arranges delivery
+2% per £10k bracket, capped at 10% off ex-VAT price.
+
+## Existing AWS Infrastructure
+
+### Price Scraping Pipeline (already running)
+- **Step Function:** `DailyPriceIngestion-prod`
+- **Source:** cardrush-op.jp (One Piece TCG)
+- **Coverage:** ~500 cards with 18 months of daily JPY price history
+- **S3 output:** `s3://pricedata-tcg/pricefeed/onepiece_pricefeed.xlsx` (updated daily)
+- **S3 history:** `s3://pricedata-tcg/daily_prices.xlsx` (full price history)
+- **Lambdas:** FetchJsonData → ClassifyVariants → InsertJsonPrices/ScrapeBatch → AggregateResults
+- **FX rate:** `get_GBP-JPY` Lambda
+- **Status:** ⚠️ Pipeline failing since Feb 12 (CardRush order stop period?)
+
+### Key Data Points from Pipeline
+- Card number: `OP01-001`
+- SKU: `OP-OP01-001-JP`
+- CarrRush URL: `https://www.cardrush-op.jp/product/169`
+- JPY price: daily from CardRush
+- GBP/JPY rate: live from `get_GBP-JPY` Lambda
 
 ## Tech Stack
 
-- **Frontend:** Next.js (simple, fast, SSR for SEO)
-- **Backend:** Next.js API routes
-- **Database:** SQLite (Drizzle ORM) — lightweight, no infra cost
-- **Price Source:** CardRush scraper (with fallback to manual CSV upload)
-- **FX Rate:** Bank of England or exchangerate.host API
-- **Auth:** Simple invite-only (streamer clients get a link)
-- **Hosting:** Vercel (free tier is plenty for this scale)
+- **Frontend:** Next.js 15 (App Router, RSC)
+- **Styling:** Tailwind CSS
+- **Database:** PostgreSQL on Neon (free tier) or SQLite
+- **ORM:** Drizzle
+- **Data source:** S3 price feed (read via AWS SDK)
+- **Auth:** NextAuth.js — invite-only (1 client initially, expandable)
+- **Hosting:** Vercel
+- **Payments:** Stripe invoicing or bank transfer
+
+## MVP Features
+
+### Client-Facing
+- [ ] Browse One Piece card price list (card number, name, GBP ex-VAT price)
+- [ ] Search/filter by set, card number, price range
+- [ ] Add cards to order with quantities
+- [ ] Submit order request (creates a quote request)
+- [ ] View order history and status
+- [ ] See volume discount tier and current month spend
+
+### Admin
+- [ ] View incoming order requests
+- [ ] Stock check workflow (link to CardRush for verification)
+- [ ] Confirm/modify/reject quotes
+- [ ] Mark orders as paid / ordered / shipped / delivered
+- [ ] Override prices for specific cards
+- [ ] Manual price feed upload (CSV fallback when pipeline is down)
+- [ ] Dashboard: revenue, margins, client spend tracking
+
+### Data Pipeline
+- [ ] Sync S3 price feed → app database (cron or on-demand)
+- [ ] Apply landing cost formula automatically
+- [ ] Track price changes over time (from daily_prices.xlsx history)
+- [ ] Alert on significant price movements (>10% daily change)
 
 ## Directory Structure
 
 ```
 tcg-wholesale/
 ├── src/
-│   ├── app/              # Next.js app router
-│   │   ├── page.tsx      # Price feed (public or auth-gated)
-│   │   ├── order/        # Order submission
-│   │   ├── admin/        # Admin dashboard
-│   │   └── api/          # API routes
+│   ├── app/
+│   │   ├── page.tsx              # Landing / redirect to catalog
+│   │   ├── catalog/              # Price list (client view)
+│   │   ├── orders/               # Order submission + history
+│   │   ├── admin/                # Admin dashboard
+│   │   │   ├── orders/           # Order management
+│   │   │   ├── prices/           # Price overrides + sync
+│   │   │   └── clients/          # Client management
+│   │   └── api/
+│   │       ├── prices/           # Price feed API
+│   │       ├── orders/           # Order CRUD
+│   │       └── sync/             # S3 → DB sync
 │   ├── lib/
-│   │   ├── pricing.ts    # Landing cost calculator
-│   │   ├── scraper.ts    # CardRush price fetcher
-│   │   ├── fx.ts         # JPY→GBP exchange rate
-│   │   └── db.ts         # Database (Drizzle + SQLite)
-│   └── components/       # UI components
-├── drizzle/              # DB migrations
-├── data/                 # Manual price CSV uploads (fallback)
-├── .env.local            # API keys, FX source, margin config
+│   │   ├── pricing.ts            # Landing cost + volume discount calc
+│   │   ├── s3.ts                 # AWS S3 client for price feed
+│   │   ├── db/                   # Drizzle schema + client
+│   │   └── auth.ts               # NextAuth config
+│   └── components/
+│       ├── catalog/              # Price table, search, filters
+│       ├── orders/               # Cart, order form, status
+│       └── admin/                # Admin UI components
+├── drizzle/                      # Migrations
+├── public/                       # Static assets
+├── .env.local                    # Config (AWS creds, DB, auth)
 └── package.json
 ```
 
-## Landing Cost Formula
+## Future Expansion
 
-```
-base_jpy       = CardRush price (JPY)
-fx_rate        = JPY/GBP spot rate
-base_gbp       = base_jpy × fx_rate
-shipping       = per-card allocation from bulk shipping cost
-customs        = base_gbp × duty_rate (if applicable)
-margin         = base_gbp × margin_pct
-final_gbp      = base_gbp + shipping + customs + margin
-```
-
-Config variables (in .env or admin panel):
-- `MARGIN_PCT` — default markup percentage
-- `SHIPPING_PER_CARD` — allocated shipping cost per card
-- `CUSTOMS_DUTY_RATE` — import duty rate (0% for most TCG under £135?)
-- `FX_BUFFER` — extra % on FX rate to absorb volatility
+- [ ] Pokémon TCG (pipeline already scrapes, `pokemon_pricefeed.xlsx` exists)
+- [ ] Yu-Gi-Oh, Dragon Ball, other games
+- [ ] Promotional / exclusive card coverage (expanded scraper)
+- [ ] Real-time price alerts for clients
+- [ ] Automated stock checking via CardRush API or scraper
+- [ ] Multi-currency support for non-UK clients
