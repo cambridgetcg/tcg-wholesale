@@ -34,6 +34,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
   const [items, setItems] = useState(initialItems);
   const [saving, setSaving] = useState<number | null>(null);
   const [completing, setCompleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [priceInputs, setPriceInputs] = useState<Record<number, string>>(() => {
     const inputs: Record<number, string> = {};
     for (const item of initialItems) {
@@ -49,6 +50,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
 
   async function updateItemStatus(itemId: number, stockStatus: string, checkedPriceJpy?: number) {
     setSaving(itemId);
+    setError(null);
     try {
       const res = await fetch(`/api/orders/${orderId}/items/${itemId}/stock`, {
         method: "PATCH",
@@ -61,6 +63,9 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
             i.id === itemId ? { ...i, stockStatus, checkedPriceJpy: checkedPriceJpy ?? null } : i
           )
         );
+      } else {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "Failed to update item status");
       }
     } finally {
       setSaving(null);
@@ -69,12 +74,16 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
 
   async function completeStockCheck() {
     setCompleting(true);
+    setError(null);
     try {
       const res = await fetch(`/api/orders/${orderId}/stock-check/complete`, {
         method: "POST",
       });
       if (res.ok) {
         router.push("/admin/orders");
+      } else {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "Failed to complete stock check");
       }
     } finally {
       setCompleting(false);
@@ -139,6 +148,13 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
           />
         </div>
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-900/50 bg-red-900/20 px-4 py-3 text-sm text-red-400">
+          {error}
+        </div>
+      )}
 
       {/* Items checklist */}
       <div className="space-y-3">
