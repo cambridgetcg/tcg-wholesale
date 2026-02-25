@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useMemo, useEffect, ReactNode } from "react";
 import { applyVolumeDiscount } from "@/lib/pricing";
 
 export interface CardData {
@@ -40,6 +40,24 @@ export function CartProvider({
   volumeDiscountPct?: number;
 }) {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("tcg-cart");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) setItems(parsed);
+      }
+    } catch {}
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) {
+      localStorage.setItem("tcg-cart", JSON.stringify(items));
+    }
+  }, [items, hydrated]);
 
   const addItem = useCallback((card: CardData, qty = 1) => {
     setItems((prev) => {
