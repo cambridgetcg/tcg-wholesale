@@ -3,6 +3,7 @@ import { createClient } from "@libsql/client";
 import { mkdirSync } from "fs";
 import { hashSync } from "bcryptjs";
 import { clients, cards } from "./schema";
+import { calculatePrice } from "../pricing";
 
 const dbPath = process.env.DATABASE_URL || "./data/tcg.db";
 mkdirSync("data", { recursive: true });
@@ -11,7 +12,7 @@ const client = createClient({ url: `file:${dbPath}` });
 const db = drizzle(client);
 
 async function seed() {
-  // Create tables
+  // Create tables via drizzle push (schema already defined), but ensure they exist for raw seed
   await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS clients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,20 +24,22 @@ async function seed() {
       current_month_spend REAL NOT NULL DEFAULT 0,
       prior_month_spend REAL NOT NULL DEFAULT 0,
       volume_discount_pct REAL NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL
+      created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS cards (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       card_number TEXT NOT NULL,
       sku TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL,
-      set_code TEXT NOT NULL,
-      set_name TEXT NOT NULL,
+      name TEXT DEFAULT '',
+      set_code TEXT,
+      set_name TEXT,
       cardrush_url TEXT,
-      cardrush_jpy REAL NOT NULL,
-      base_gbp REAL NOT NULL,
-      price_ex_vat REAL NOT NULL,
-      last_synced_at TEXT NOT NULL
+      cardrush_jpy INTEGER,
+      gbp_jpy_rate REAL,
+      base_gbp REAL,
+      price_ex_vat REAL,
+      ebay_item_number TEXT,
+      last_synced_at TEXT
     );
     CREATE TABLE IF NOT EXISTS orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,14 +47,15 @@ async function seed() {
       status TEXT NOT NULL DEFAULT 'draft',
       total_ex_vat REAL NOT NULL DEFAULT 0,
       volume_discount REAL NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS order_items (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       order_id INTEGER NOT NULL REFERENCES orders(id),
       card_id INTEGER NOT NULL REFERENCES cards(id),
-      quantity INTEGER NOT NULL,
+      quantity INTEGER NOT NULL DEFAULT 1,
       unit_price_ex_vat REAL NOT NULL,
       line_total REAL NOT NULL
     );
@@ -59,58 +63,52 @@ async function seed() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       card_id INTEGER NOT NULL REFERENCES cards(id),
       date TEXT NOT NULL,
-      cardrush_jpy REAL NOT NULL,
+      cardrush_jpy INTEGER NOT NULL,
       gbp_jpy_rate REAL NOT NULL
     );
   `);
 
-  const now = new Date().toISOString();
-
   // Seed admin
   await db.insert(clients).values({
     name: "Admin",
-    email: "admin@tcg-wholesale.co.uk",
+    email: "admin@cambridgetcg.com",
     passwordHash: hashSync("admin123", 10),
-    company: "TCG Wholesale Ltd",
+    company: "Cambridge TCG",
     role: "admin",
     currentMonthSpend: 0,
     priorMonthSpend: 0,
     volumeDiscountPct: 0,
-    createdAt: now,
   }).onConflictDoNothing();
 
   // Seed test client
   await db.insert(clients).values({
     name: "Test Client",
-    email: "client@example.com",
+    email: "client@streamer.com",
     passwordHash: hashSync("client123", 10),
     company: "StreamerCo",
     role: "client",
     currentMonthSpend: 0,
     priorMonthSpend: 25000,
     volumeDiscountPct: 4,
-    createdAt: now,
   }).onConflictDoNothing();
 
-  // Seed sample cards
+  // Seed 10 sample One Piece cards with realistic JPY prices
   const rate = 208.53;
   const sampleCards = [
     { cardNumber: "OP01-001", sku: "OP-OP01-001-JP", name: "Roronoa Zoro (Leader)", setCode: "OP01", setName: "Romance Dawn", jpy: 17800 },
     { cardNumber: "OP01-002", sku: "OP-OP01-002-JP", name: "Nami", setCode: "OP01", setName: "Romance Dawn", jpy: 2500 },
     { cardNumber: "OP01-003", sku: "OP-OP01-003-JP", name: "Usopp", setCode: "OP01", setName: "Romance Dawn", jpy: 1200 },
+    { cardNumber: "OP01-060", sku: "OP-OP01-060-JP", name: "Shanks", setCode: "OP01", setName: "Romance Dawn", jpy: 9800 },
     { cardNumber: "OP02-001", sku: "OP-OP02-001-JP", name: "Monkey D. Luffy (Leader)", setCode: "OP02", setName: "Paramount War", jpy: 22000 },
     { cardNumber: "OP02-002", sku: "OP-OP02-002-JP", name: "Portgas D. Ace", setCode: "OP02", setName: "Paramount War", jpy: 8500 },
     { cardNumber: "OP03-001", sku: "OP-OP03-001-JP", name: "Boa Hancock (Leader)", setCode: "OP03", setName: "Pillars of Strength", jpy: 15000 },
     { cardNumber: "OP03-002", sku: "OP-OP03-002-JP", name: "Crocodile", setCode: "OP03", setName: "Pillars of Strength", jpy: 6200 },
     { cardNumber: "OP04-001", sku: "OP-OP04-001-JP", name: "Kaido (Leader)", setCode: "OP04", setName: "Kingdoms of Intrigue", jpy: 19500 },
+    { cardNumber: "OP04-044", sku: "OP-OP04-044-JP", name: "Yamato", setCode: "OP04", setName: "Kingdoms of Intrigue", jpy: 12500 },
   ];
 
   for (const c of sampleCards) {
-    const baseGbp = c.jpy / rate;
-    const shipping = baseGbp * 0.05;
-    const landed = baseGbp + shipping;
-    const margin = landed * 0.20;
-    const priceExVat = landed + margin;
+    const price = calculatePrice(c.jpy, rate);
 
     await db.insert(cards).values({
       cardNumber: c.cardNumber,
@@ -120,13 +118,14 @@ async function seed() {
       setName: c.setName,
       cardrushUrl: `https://www.cardrush-op.jp/product/${c.cardNumber}`,
       cardrushJpy: c.jpy,
-      baseGbp: Math.round(baseGbp * 100) / 100,
-      priceExVat: Math.round(priceExVat * 100) / 100,
-      lastSyncedAt: now,
+      gbpJpyRate: rate,
+      baseGbp: price.baseGbp,
+      priceExVat: price.priceExVat,
+      lastSyncedAt: new Date().toISOString(),
     }).onConflictDoNothing();
   }
 
-  console.log("✅ Seeded database with admin, test client, and 8 sample cards");
+  console.log("Seeded database with admin, test client, and 10 sample cards");
   process.exit(0);
 }
 
