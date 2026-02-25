@@ -20,6 +20,7 @@ export async function GET() {
       totalExVat: orders.totalExVat,
       volumeDiscount: orders.volumeDiscount,
       notes: orders.notes,
+      stockCheckedAt: orders.stockCheckedAt,
       createdAt: orders.createdAt,
       updatedAt: orders.updatedAt,
     })
