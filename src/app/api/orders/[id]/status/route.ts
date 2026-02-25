@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { orders, orderItems } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { orders, orderItems, clients } from "@/lib/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { sendOrderEmail } from "@/lib/email/send-order-email";
 
 const validStatuses = ["draft", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"] as const;
 
@@ -33,7 +34,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
     const total = allItems.reduce((sum, i) => sum + i.lineTotal, 0);
     await db.update(orders)
-      .set({ totalExVat: Math.round(total * 100) / 100, updatedAt: new Date().toISOString() })
+      .set({ totalExVat: Math.round(total * 100) / 100, updatedAt: new Date() })
       .where(eq(orders.id, orderId));
   }
 
@@ -42,9 +43,47 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!validStatuses.includes(body.status as typeof validStatuses[number])) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
+    const now = new Date();
+    const statusUpdate: Record<string, unknown> = {
+      status: body.status as typeof validStatuses[number],
+      updatedAt: now,
+    };
+
+    // Set quote timestamps when transitioning to "quoted"
+    if (body.status === "quoted") {
+      statusUpdate.quotedAt = now;
+      statusUpdate.quotedExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    }
+
     await db.update(orders)
-      .set({ status: body.status as typeof validStatuses[number], updatedAt: new Date().toISOString() })
+      .set(statusUpdate)
       .where(eq(orders.id, orderId));
+
+    // When order becomes "paid", add its total to client's currentMonthSpend
+    if (body.status === "paid") {
+      const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+      if (order) {
+        await db.update(clients)
+          .set({ currentMonthSpend: sql`current_month_spend + ${order.totalExVat}` })
+          .where(eq(clients.id, order.clientId));
+      }
+    }
+
+    // Send notification email for key status transitions
+    const emailMap: Record<string, "quote_ready" | "confirmed" | "shipped" | "delivered"> = {
+      quoted: "quote_ready",
+      confirmed: "confirmed",
+      shipped: "shipped",
+      delivered: "delivered",
+    };
+    const emailType = emailMap[body.status];
+    if (emailType) {
+      try {
+        await sendOrderEmail(orderId, emailType);
+      } catch {
+        // Email failure should not break status update
+      }
+    }
   }
 
   const [updated] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
