@@ -1,0 +1,24 @@
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import Nav from "@/components/Nav";
+import Link from "next/link";
+
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+  if (!session || session.user.role !== "admin") redirect("/catalog");
+
+  return (
+    <>
+      <Nav />
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="mb-6 flex gap-4 border-b border-[#1e1e2e] pb-4">
+          <Link href="/admin" className="text-sm hover:text-brand-500 transition">Dashboard</Link>
+          <Link href="/admin/orders" className="text-sm hover:text-brand-500 transition">Orders</Link>
+          <Link href="/admin/prices" className="text-sm hover:text-brand-500 transition">Prices</Link>
+          <Link href="/admin/clients" className="text-sm hover:text-brand-500 transition">Clients</Link>
+        </div>
+        {children}
+      </div>
+    </>
+  );
+}
