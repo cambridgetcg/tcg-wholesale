@@ -1,22 +1,6 @@
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import ExcelJS from "exceljs";
 
-const SET_NAME_MAP: Record<string, string> = {
-  OP01: "Romance Dawn",
-  OP02: "Paramount War",
-  OP03: "Pillars of Strength",
-  OP04: "Kingdoms of Intrigue",
-  OP05: "Awakening of the New Era",
-  OP06: "Wings of the Captain",
-  OP07: "500 Years in the Future",
-  OP08: "Two Legends",
-  OP09: "The Four Emperors",
-};
-
-export function getSetName(setCode: string): string {
-  return SET_NAME_MAP[setCode] ?? setCode;
-}
-
 const s3 = new S3Client({
   region: process.env.AWS_REGION || "eu-west-2",
   credentials: {
@@ -56,8 +40,7 @@ export async function fetchPriceFeed(): Promise<CardPriceRow[]> {
       const setCode = parts[0] || "";
       const cardNumber = parts.length >= 2 ? `${parts[0]}-${parts[1]}` : sku;
 
-      const setName = getSetName(setCode);
-      rows.push({ sku, cardNumber, setCode, setName, cardrushJpy, gbpToJpy, ebayItemNumber });
+      rows.push({ sku, cardNumber, setCode, setName: setCode, cardrushJpy, gbpToJpy, ebayItemNumber });
     }
   });
 
