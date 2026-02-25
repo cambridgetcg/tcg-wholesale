@@ -36,6 +36,16 @@ interface EditableItem {
   available: boolean;
 }
 
+interface NotificationRow {
+  id: number;
+  orderId: number;
+  type: string;
+  recipient: string;
+  status: string;
+  error: string | null;
+  sentAt: string | null;
+}
+
 const statusFilters = ["all", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"];
 
 const nextAction: Record<string, { label: string; next: string } | null> = {
@@ -60,6 +70,7 @@ export default function AdminOrdersPage() {
   const [editItems, setEditItems] = useState<Record<number, EditableItem[]>>({});
   const [adminNotes, setAdminNotes] = useState<Record<number, string>>({});
   const [sending, setSending] = useState(false);
+  const [notifs, setNotifs] = useState<Record<number, NotificationRow[]>>({});
 
   const fetchOrders = useCallback(async () => {
     const res = await fetch("/api/admin/orders");
@@ -80,6 +91,11 @@ export default function AdminOrdersPage() {
       const res = await fetch(`/api/orders/${orderId}/items`);
       const data: OrderItemRow[] = await res.json();
       setItems((prev) => ({ ...prev, [orderId]: data }));
+      // Fetch notification history
+      const notifRes = await fetch(`/api/admin/orders/${orderId}/notifications`);
+      const notifData: NotificationRow[] = await notifRes.json();
+      setNotifs((prev) => ({ ...prev, [orderId]: notifData }));
+
       // Initialize editable state for submitted orders
       const order = orders.find((o) => o.id === orderId);
       if (order?.status === "submitted" && !editItems[orderId]) {
@@ -389,6 +405,30 @@ export default function AdminOrdersPage() {
                             ))}
                           </tbody>
                         </table>
+                      )}
+
+                      {/* Notification history */}
+                      {notifs[order.id] && notifs[order.id].length > 0 && (
+                        <div className="mt-4 pt-4 border-t border-[#1e1e2e]">
+                          <h4 className="text-xs font-semibold text-gray-400 mb-2">Notification History</h4>
+                          <div className="space-y-1">
+                            {notifs[order.id].map((n) => (
+                              <div key={n.id} className="flex items-center gap-3 text-xs">
+                                <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${n.status === "sent" ? "bg-green-500" : "bg-red-500"}`} />
+                                <span className="text-gray-300 w-24">
+                                  {n.type.replace(/_/g, " ")}
+                                </span>
+                                <span className="text-gray-500 truncate">{n.recipient}</span>
+                                <span className="text-gray-600 ml-auto flex-shrink-0">
+                                  {n.sentAt ? new Date(n.sentAt).toLocaleString() : "—"}
+                                </span>
+                                {n.error && (
+                                  <span className="text-red-400 flex-shrink-0" title={n.error}>error</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </td>
                   </tr>
