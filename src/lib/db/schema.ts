@@ -98,6 +98,18 @@ export const priceHistory = sqliteTable("price_history", {
   cardDateUnique: uniqueIndex("price_history_card_date_idx").on(table.cardId, table.date),
 }));
 
+export const notifications = sqliteTable("notifications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  type: text("type", {
+    enum: ["quote_ready", "confirmed", "shipped", "delivered", "new_order"],
+  }).notNull(),
+  recipient: text("recipient").notNull(),
+  status: text("status", { enum: ["sent", "failed"] }).notNull(),
+  error: text("error"),
+  sentAt: text("sent_at").default(sql`(datetime('now'))`),
+});
+
 export type Client = typeof clients.$inferSelect;
 export type Game = typeof games.$inferSelect;
 export type GameSet = typeof sets.$inferSelect;
@@ -105,3 +117,4 @@ export type Card = typeof cards.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type PriceHistory = typeof priceHistory.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
