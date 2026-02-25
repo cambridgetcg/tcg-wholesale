@@ -140,7 +140,7 @@ export default async function CatalogPage({
             <h1 className="text-2xl font-bold">Card Catalog</h1>
             {lastSynced && (
               <p className="mt-1 text-xs text-gray-500">
-                Last synced: {new Date(lastSynced).toLocaleString("en-GB")}
+                Last synced: {lastSynced instanceof Date ? lastSynced.toLocaleString("en-GB") : lastSynced}
               </p>
             )}
           </div>

@@ -88,8 +88,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const total = allItems.reduce((sum, i) => sum + i.lineTotal, 0);
 
   // Set quoted timestamps
-  const quotedAt = new Date().toISOString();
-  const quotedExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const quotedAt = new Date();
+  const quotedExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
   await db.update(orders)
     .set({

@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ id: client.id, name: client.name, email: client.email });
   } catch (error: unknown) {
-    if (String(error).includes("UNIQUE")) {
+    if (String(error).includes("duplicate key") || String(error).includes("UNIQUE")) {
       return NextResponse.json({ error: "Email already exists" }, { status: 409 });
     }
     throw error;

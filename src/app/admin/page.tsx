@@ -5,9 +5,7 @@ import Link from "next/link";
 
 export default async function AdminDashboard() {
   const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, "0");
-  const monthStart = `${y}-${m}-01 00:00:00`;
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
   const allOrders = await db.select().from(orders);
   const activeClients = await db.select().from(clients).where(eq(clients.role, "client"));
@@ -18,7 +16,7 @@ export default async function AdminDashboard() {
   const monthRevenue = allOrders
     .filter((o) =>
       ["paid", "ordered", "shipped", "delivered"].includes(o.status) &&
-      (o.createdAt ?? "") >= monthStart
+      o.createdAt != null && o.createdAt >= monthStart
     )
     .reduce((sum, o) => sum + o.totalExVat, 0);
 
@@ -33,7 +31,7 @@ export default async function AdminDashboard() {
     { label: "Pending Orders", value: pendingOrders.length, sub: `£${pendingTotal.toFixed(2)} total` },
     { label: "This Month Revenue", value: `£${monthRevenue.toFixed(2)}`, sub: "ex-VAT" },
     { label: "Active Clients", value: activeClients.length, sub: null },
-    { label: "Last Price Sync", value: lastSyncTime ? new Date(lastSyncTime).toLocaleDateString() : "Never", sub: lastSyncTime ? new Date(lastSyncTime).toLocaleTimeString() : null },
+    { label: "Last Price Sync", value: lastSyncTime ? lastSyncTime.toLocaleDateString() : "Never", sub: lastSyncTime ? lastSyncTime.toLocaleTimeString() : null },
   ];
 
   const links = [

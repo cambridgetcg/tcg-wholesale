@@ -15,7 +15,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const [updated] = await db
     .update(cards)
-    .set({ priceExVat, lastSyncedAt: new Date().toISOString() })
+    .set({ priceExVat, lastSyncedAt: new Date() })
     .where(eq(cards.id, parseInt(id)))
     .returning();
 

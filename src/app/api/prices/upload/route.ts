@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const jpyIdx = cols.indexOf("jpy_price");
   const rateIdx = cols.indexOf("gbp_jpy_rate");
 
-  const now = new Date().toISOString();
+  const now = new Date();
   let updated = 0;
   const errors: string[] = [];
 
@@ -69,8 +69,7 @@ export async function POST(req: NextRequest) {
             priceExVat: price.priceExVat,
             lastSyncedAt: now,
           },
-        })
-        .run();
+        });
     } else {
       await db
         .insert(cards)
@@ -83,8 +82,7 @@ export async function POST(req: NextRequest) {
         .onConflictDoUpdate({
           target: cards.sku,
           set: { cardrushJpy: jpyPrice, lastSyncedAt: now },
-        })
-        .run();
+        });
     }
     updated++;
   }

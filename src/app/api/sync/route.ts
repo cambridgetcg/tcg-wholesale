@@ -14,18 +14,18 @@ export async function POST() {
 
   try {
     const rows = await fetchPriceFeed();
-    const now = new Date().toISOString();
-    const today = now.slice(0, 10);
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
     let synced = 0;
 
     // Get-or-create the game record
     const gameCode = "onepiece"; // all current data is One Piece
-    let game = await db.select().from(games).where(eq(games.code, gameCode)).get();
+    let [game] = await db.select().from(games).where(eq(games.code, gameCode)).limit(1);
     if (!game) {
       await db.insert(games).values({
         code: "onepiece", name: "One Piece", slug: "one-piece", active: true, sortOrder: 0,
-      }).run();
-      game = await db.select().from(games).where(eq(games.code, gameCode)).get();
+      });
+      [game] = await db.select().from(games).where(eq(games.code, gameCode)).limit(1);
     }
 
     const setCache = new Map<string, number>();
@@ -35,12 +35,12 @@ export async function POST() {
 
       // Get-or-create the set record
       if (!setCache.has(row.setCode)) {
-        let set = await db.select().from(sets).where(eq(sets.code, row.setCode)).get();
+        let [set] = await db.select().from(sets).where(eq(sets.code, row.setCode)).limit(1);
         if (!set) {
           await db.insert(sets).values({
             gameId: game!.id, code: row.setCode, name: row.setName, sortOrder: 0,
-          }).run();
-          set = await db.select().from(sets).where(eq(sets.code, row.setCode)).get();
+          });
+          [set] = await db.select().from(sets).where(eq(sets.code, row.setCode)).limit(1);
         }
         setCache.set(row.setCode, set!.id);
       }
@@ -75,15 +75,14 @@ export async function POST() {
             setId: setCache.get(row.setCode)!,
             category: "singles" as const,
           },
-        })
-        .run();
+        });
 
       // Get the card ID for price history
-      const card = await db
+      const [card] = await db
         .select({ id: cards.id })
         .from(cards)
         .where(eq(cards.sku, row.sku))
-        .get();
+        .limit(1);
 
       if (card) {
         await db.insert(priceHistory)
@@ -99,8 +98,7 @@ export async function POST() {
               cardrushJpy: row.cardrushJpy,
               gbpJpyRate: row.gbpToJpy,
             },
-          })
-          .run();
+          });
       }
 
       synced++;

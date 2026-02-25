@@ -1,98 +1,20 @@
-import { drizzle } from "drizzle-orm/libsql";
-import { createClient } from "@libsql/client";
-import { mkdirSync } from "fs";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { hashSync } from "bcryptjs";
-import { clients, cards, games, sets } from "./schema";
+import { clients, games, sets, cards } from "./schema";
 import { eq } from "drizzle-orm";
 import { calculatePrice } from "../pricing";
 
-const dbPath = process.env.DATABASE_URL || "./data/tcg.db";
-mkdirSync("data", { recursive: true });
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  console.error("DATABASE_URL is required");
+  process.exit(1);
+}
 
-const client = createClient({ url: `file:${dbPath}` });
+const client = postgres(connectionString, { max: 1 });
 const db = drizzle(client);
 
 async function seed() {
-  // Create tables via drizzle push (schema already defined), but ensure they exist for raw seed
-  await client.executeMultiple(`
-    CREATE TABLE IF NOT EXISTS clients (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
-      password_hash TEXT NOT NULL,
-      company TEXT,
-      role TEXT NOT NULL DEFAULT 'client',
-      current_month_spend REAL NOT NULL DEFAULT 0,
-      prior_month_spend REAL NOT NULL DEFAULT 0,
-      volume_discount_pct REAL NOT NULL DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS cards (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      card_number TEXT NOT NULL,
-      sku TEXT NOT NULL UNIQUE,
-      name TEXT DEFAULT '',
-      set_code TEXT,
-      set_name TEXT,
-      cardrush_url TEXT,
-      cardrush_jpy INTEGER,
-      gbp_jpy_rate REAL,
-      base_gbp REAL,
-      price_ex_vat REAL,
-      ebay_item_number TEXT,
-      last_synced_at TEXT,
-      game_id INTEGER REFERENCES games(id),
-      set_id INTEGER REFERENCES sets(id),
-      category TEXT NOT NULL DEFAULT 'singles',
-      product_type TEXT,
-      image_url TEXT
-    );
-    CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      client_id INTEGER NOT NULL REFERENCES clients(id),
-      status TEXT NOT NULL DEFAULT 'draft',
-      total_ex_vat REAL NOT NULL DEFAULT 0,
-      volume_discount REAL NOT NULL DEFAULT 0,
-      notes TEXT,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
-    );
-    CREATE TABLE IF NOT EXISTS order_items (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      order_id INTEGER NOT NULL REFERENCES orders(id),
-      card_id INTEGER NOT NULL REFERENCES cards(id),
-      quantity INTEGER NOT NULL DEFAULT 1,
-      unit_price_ex_vat REAL NOT NULL,
-      line_total REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS price_history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      card_id INTEGER NOT NULL REFERENCES cards(id),
-      date TEXT NOT NULL,
-      cardrush_jpy INTEGER NOT NULL,
-      gbp_jpy_rate REAL NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS games (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      code TEXT NOT NULL UNIQUE,
-      name TEXT NOT NULL,
-      slug TEXT NOT NULL UNIQUE,
-      image_url TEXT,
-      sort_order INTEGER DEFAULT 0,
-      active INTEGER DEFAULT 1
-    );
-    CREATE TABLE IF NOT EXISTS sets (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      game_id INTEGER NOT NULL REFERENCES games(id),
-      code TEXT NOT NULL,
-      name TEXT NOT NULL,
-      release_date TEXT,
-      sort_order INTEGER DEFAULT 0,
-      active INTEGER DEFAULT 1
-    );
-    CREATE UNIQUE INDEX IF NOT EXISTS sets_game_code_idx ON sets(game_id, code);
-  `);
-
   // Seed admin
   await db.insert(clients).values({
     name: "Admin",
@@ -129,10 +51,15 @@ async function seed() {
     await db.insert(games).values(g).onConflictDoNothing();
   }
 
-  // Seed One Piece sets
-  const onepieceGame = await db.select({ id: games.id }).from(games).where(eq(games.code, "onepiece")).get();
+  // Get One Piece game ID
+  const [onepieceGame] = await db
+    .select({ id: games.id })
+    .from(games)
+    .where(eq(games.code, "onepiece"))
+    .limit(1);
   const onepieceId = onepieceGame!.id;
 
+  // Seed One Piece sets
   const setData = [
     { code: "OP01", name: "Romance Dawn", releaseDate: "2022-07-22", sortOrder: 0 },
     { code: "OP02", name: "Paramount War", releaseDate: "2022-11-04", sortOrder: 1 },
@@ -172,7 +99,7 @@ async function seed() {
   const allSets = await db.select({ id: sets.id, code: sets.code }).from(sets).where(eq(sets.gameId, onepieceId));
   const setIdMap = Object.fromEntries(allSets.map(s => [s.code, s.id]));
 
-  // Seed 10 sample One Piece cards with realistic JPY prices
+  // Seed 10 sample One Piece cards
   const rate = 208.53;
   const sampleCards = [
     { cardNumber: "OP01-001", sku: "OP-OP01-001-JP", name: "Roronoa Zoro (Leader)", setCode: "OP01", setName: "Romance Dawn", jpy: 17800 },
@@ -201,14 +128,15 @@ async function seed() {
       gbpJpyRate: rate,
       baseGbp: price.baseGbp,
       priceExVat: price.priceExVat,
-      lastSyncedAt: new Date().toISOString(),
+      lastSyncedAt: new Date(),
       gameId: onepieceId,
       setId: setIdMap[c.setCode],
       category: "singles" as const,
     }).onConflictDoNothing();
   }
 
-  console.log("Seeded database with admin, test client, and 10 sample cards");
+  console.log("Seeded database with admin, test client, games, sets, and 10 sample cards");
+  await client.end();
   process.exit(0);
 }
 

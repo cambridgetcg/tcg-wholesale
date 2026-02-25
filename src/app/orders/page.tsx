@@ -77,7 +77,7 @@ export default async function OrdersPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-gray-400">
-                    {new Date(order.createdAt ?? "").toLocaleDateString()}
+                    {order.createdAt?.toLocaleDateString() ?? "\u2014"}
                   </td>
                   <td className="px-4 py-3 text-right text-gray-400">{order.itemCount}</td>
                   <td className="px-4 py-3 text-right font-medium">

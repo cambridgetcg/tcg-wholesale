@@ -27,6 +27,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       id: orderItems.id,
       quantity: orderItems.quantity,
       unitPriceExVat: orderItems.unitPriceExVat,
+      originalUnitPrice: orderItems.originalUnitPrice,
       lineTotal: orderItems.lineTotal,
       cardNumber: cards.cardNumber,
       cardName: cards.name,
@@ -36,6 +37,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     .where(eq(orderItems.orderId, orderId));
 
   const currentIdx = statusSteps.indexOf(order.status);
+  const isQuoted = order.status === "quoted";
+  const quoteExpired = isQuoted && order.quotedExpiresAt && order.quotedExpiresAt < new Date();
 
   // Compute full totals
   const discountPct = order.volumeDiscount;
@@ -55,13 +58,18 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <StatusBadge status={order.status} />
         </div>
         <p className="mb-6 text-sm text-gray-400">
-          Created {new Date(order.createdAt ?? "").toLocaleString()}
+          Created {order.createdAt?.toLocaleString() ?? "\u2014"}
         </p>
 
-        {/* Quote valid banner */}
-        {order.status === "quoted" && (
+        {/* Quote valid / expired banner */}
+        {isQuoted && !quoteExpired && order.quotedExpiresAt && (
           <div className="mb-6 rounded-lg bg-yellow-900/20 border border-yellow-700/30 px-4 py-3 text-sm text-yellow-300">
-            This quote is valid for 48 hours. Contact us to confirm.
+            Quote valid until: {order.quotedExpiresAt!.toLocaleString()}. Contact us to confirm.
+          </div>
+        )}
+        {isQuoted && quoteExpired && (
+          <div className="mb-6 rounded-lg bg-red-900/20 border border-red-700/30 px-4 py-3 text-sm text-red-300">
+            Quote expired — please resubmit or contact us.
           </div>
         )}
 
@@ -96,21 +104,38 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e1e2e]">
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td className="px-4 py-3">
-                      <span className="font-mono text-brand-500">{item.cardNumber}</span>{" "}
-                      {item.cardName}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-400">
-                      &pound;{item.unitPriceExVat.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 text-right">{item.quantity}</td>
-                    <td className="px-4 py-3 text-right font-medium">
-                      &pound;{item.lineTotal.toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
+                {items.map((item) => {
+                  const priceChanged = item.originalUnitPrice != null
+                    && Math.abs(item.originalUnitPrice - item.unitPriceExVat) >= 0.01;
+                  return (
+                    <tr key={item.id}>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-brand-500">{item.cardNumber}</span>{" "}
+                        {item.cardName}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {priceChanged ? (
+                          <span>
+                            <span className="text-gray-600 line-through mr-2">
+                              &pound;{item.originalUnitPrice!.toFixed(2)}
+                            </span>
+                            <span className="text-yellow-300">
+                              &pound;{item.unitPriceExVat.toFixed(2)}
+                            </span>
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">
+                            &pound;{item.unitPriceExVat.toFixed(2)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">{item.quantity}</td>
+                      <td className="px-4 py-3 text-right font-medium">
+                        &pound;{item.lineTotal.toFixed(2)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -143,6 +168,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 <span className="text-green-400">&pound;{totalIncVat.toFixed(2)}</span>
               </div>
             </div>
+
+            {/* Quote expiry info */}
+            {order.quotedAt && (
+              <div className="border-t border-[#1e1e2e] pt-3 text-xs text-gray-500">
+                Quoted on {order.quotedAt!.toLocaleString()}
+              </div>
+            )}
 
             {/* Notes */}
             {order.notes && (
