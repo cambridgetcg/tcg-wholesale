@@ -79,8 +79,20 @@ export default async function CatalogPage({
     : undefined;
 
   // Sort column
-  const sortColumn = sortField === "price" ? cards.priceExVat : cards.cardNumber;
-  const orderBy = sortOrder === "desc" ? desc(sortColumn) : asc(sortColumn);
+  let orderByClause;
+  if (sortField === "price") {
+    orderByClause = sortOrder === "desc" ? desc(cards.priceExVat) : asc(cards.priceExVat);
+  } else if (sortField === "set") {
+    // Sort by setCode then cardNumber within set
+    orderByClause = sortOrder === "desc"
+      ? [desc(cards.setCode), desc(cards.cardNumber)]
+      : [asc(cards.setCode), asc(cards.cardNumber)];
+  } else if (sortField === "newest") {
+    // Sort by set release order (using setId as proxy for chronological), newest first
+    orderByClause = [desc(cards.setId), asc(cards.cardNumber)];
+  } else {
+    orderByClause = sortOrder === "desc" ? desc(cards.cardNumber) : asc(cards.cardNumber);
+  }
 
   // Count total matching rows
   const [{ total }] = await db
@@ -96,7 +108,7 @@ export default async function CatalogPage({
     .select()
     .from(cards)
     .where(whereClause)
-    .orderBy(orderBy)
+    .orderBy(...(Array.isArray(orderByClause) ? orderByClause : [orderByClause]))
     .limit(PER_PAGE)
     .offset((safePage - 1) * PER_PAGE);
 
@@ -148,7 +160,7 @@ export default async function CatalogPage({
             <CategoryToggle currentCategory={categoryFilter} />
           </Suspense>
           <Suspense>
-            <SearchBar sets={sets} currentQuery={query} currentSet={setFilter} />
+            <SearchBar sets={sets} currentQuery={query} currentSet={setFilter} currentSort={sortField} currentOrder={sortOrder} />
           </Suspense>
         </div>
 
