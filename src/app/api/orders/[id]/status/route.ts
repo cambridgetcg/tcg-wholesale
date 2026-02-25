@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { orders } from "@/lib/db/schema";
+import { orders, orderItems } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 
-const validStatuses = ["draft", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered"] as const;
+const validStatuses = ["draft", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"] as const;
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -13,16 +13,40 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const { status } = await req.json() as { status: string };
-  if (!validStatuses.includes(status as typeof validStatuses[number])) {
-    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+  const orderId = parseInt(id);
+  const body = await req.json() as {
+    status?: string;
+    items?: { id: number; unitPriceExVat: number }[];
+  };
+
+  // Update line item prices if provided (for quote adjustments)
+  if (body.items?.length) {
+    for (const item of body.items) {
+      const [lineItem] = await db.select().from(orderItems).where(eq(orderItems.id, item.id)).limit(1);
+      if (!lineItem || lineItem.orderId !== orderId) continue;
+      const lineTotal = Math.round(item.unitPriceExVat * lineItem.quantity * 100) / 100;
+      await db.update(orderItems)
+        .set({ unitPriceExVat: item.unitPriceExVat, lineTotal })
+        .where(eq(orderItems.id, item.id));
+    }
+    // Recalculate order total from all items
+    const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
+    const total = allItems.reduce((sum, i) => sum + i.lineTotal, 0);
+    await db.update(orders)
+      .set({ totalExVat: Math.round(total * 100) / 100, updatedAt: new Date().toISOString() })
+      .where(eq(orders.id, orderId));
   }
 
-  const [updated] = await db
-    .update(orders)
-    .set({ status: status as typeof validStatuses[number], updatedAt: new Date().toISOString() })
-    .where(eq(orders.id, parseInt(id)))
-    .returning();
+  // Update status if provided
+  if (body.status) {
+    if (!validStatuses.includes(body.status as typeof validStatuses[number])) {
+      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    }
+    await db.update(orders)
+      .set({ status: body.status as typeof validStatuses[number], updatedAt: new Date().toISOString() })
+      .where(eq(orders.id, orderId));
+  }
 
+  const [updated] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   return NextResponse.json(updated);
 }

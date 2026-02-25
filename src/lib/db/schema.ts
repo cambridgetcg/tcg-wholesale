@@ -34,7 +34,7 @@ export const orders = sqliteTable("orders", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   clientId: integer("client_id").notNull().references(() => clients.id),
   status: text("status", {
-    enum: ["draft", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered"],
+    enum: ["draft", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"],
   }).notNull().default("draft"),
   totalExVat: real("total_ex_vat").notNull().default(0),
   volumeDiscount: real("volume_discount").notNull().default(0),
