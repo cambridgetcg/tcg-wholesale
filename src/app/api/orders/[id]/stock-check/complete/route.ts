@@ -4,6 +4,7 @@ import { orderItems, orders, cards } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { calculatePrice } from "@/lib/pricing";
+import { sendOrderEmail } from "@/lib/email/send-order-email";
 
 export async function POST(
   req: NextRequest,
@@ -79,8 +80,8 @@ export async function POST(
   const remaining = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
   const newTotal = Math.round(remaining.reduce((sum, i) => sum + i.lineTotal, 0) * 100) / 100;
 
-  const now = new Date().toISOString();
-  const quotedExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+  const now = new Date();
+  const quotedExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
   await db.update(orders)
     .set({
@@ -92,6 +93,13 @@ export async function POST(
       updatedAt: now,
     })
     .where(eq(orders.id, orderId));
+
+  // Send quote ready email to client
+  try {
+    await sendOrderEmail(orderId, "quote_ready");
+  } catch {
+    // Email failure should not break stock check completion
+  }
 
   return NextResponse.json({
     success: true,
