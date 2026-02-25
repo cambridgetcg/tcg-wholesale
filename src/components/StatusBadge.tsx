@@ -7,6 +7,7 @@ const colors: Record<string, string> = {
   ordered: "bg-purple-600",
   shipped: "bg-indigo-600",
   delivered: "bg-emerald-600",
+  cancelled: "bg-red-600",
 };
 
 export default function StatusBadge({ status }: { status: string }) {
