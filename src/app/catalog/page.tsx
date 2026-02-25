@@ -1,9 +1,10 @@
 import { Suspense } from "react";
 import { db } from "@/lib/db";
-import { cards } from "@/lib/db/schema";
+import { cards, sets as setsTable } from "@/lib/db/schema";
 import { like, or, eq, asc, desc, count, max, sql, SQL } from "drizzle-orm";
-import { getVolumeDiscount } from "@/lib/get-volume-discount";
+import { getVolumeDiscountInfo } from "@/lib/get-volume-discount";
 import Nav from "@/components/Nav";
+import Link from "next/link";
 import SearchBar from "@/components/catalog/SearchBar";
 import CardTable from "@/components/catalog/CardTable";
 import Pagination from "@/components/catalog/Pagination";
@@ -28,8 +29,9 @@ export default async function CatalogPage({
   const sortOrder = params.order === "desc" ? "desc" : "asc";
   const page = Math.max(1, parseInt(params.page || "1", 10) || 1);
 
-  // Get volume discount for current user (cached per request)
-  const volumeDiscountPct = await getVolumeDiscount();
+  // Get volume discount info for current user (cached per request)
+  const discountInfo = await getVolumeDiscountInfo();
+  const volumeDiscountPct = discountInfo.volumeDiscountPct;
 
   // Build where conditions
   const conditions: SQL[] = [];
@@ -37,6 +39,7 @@ export default async function CatalogPage({
     const pattern = `%${query}%`;
     conditions.push(
       or(
+        like(cards.name, pattern),
         like(cards.cardNumber, pattern),
         like(cards.sku, pattern)
       )!
@@ -74,14 +77,12 @@ export default async function CatalogPage({
     .limit(PER_PAGE)
     .offset((safePage - 1) * PER_PAGE);
 
-  // Distinct set codes for dropdown
+  // Sets for dropdown (code + name from sets table)
   const setRows = await db
-    .selectDistinct({ setCode: cards.setCode })
-    .from(cards);
-  const sets = setRows
-    .map((r) => r.setCode)
-    .filter((s): s is string => !!s)
-    .sort();
+    .select({ code: setsTable.code, name: setsTable.name })
+    .from(setsTable)
+    .orderBy(asc(setsTable.code));
+  const sets = setRows.map((r) => ({ code: r.code, name: r.name }));
 
   // Last synced timestamp
   const [{ lastSynced }] = await db
@@ -106,9 +107,25 @@ export default async function CatalogPage({
           </Suspense>
         </div>
 
-        {volumeDiscountPct > 0 && (
-          <div className="mb-4 rounded bg-green-900/20 border border-green-800/30 px-4 py-2 text-sm text-green-400">
-            Your volume discount: {(volumeDiscountPct * 100).toFixed(0)}% off all prices
+        {volumeDiscountPct > 0 ? (
+          <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-sm">
+            <span className="text-gray-400">
+              Your discount:{" "}
+              <span className="font-semibold text-green-400">{(volumeDiscountPct * 100).toFixed(0)}%</span>
+              {" "}off all prices
+            </span>
+            <Link href="/discount" className="ml-3 text-brand-400 hover:text-brand-300 transition">
+              View tiers &rarr;
+            </Link>
+          </div>
+        ) : (
+          <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-sm">
+            <span className="text-gray-400">
+              Volume discounts available &mdash;{" "}
+            </span>
+            <Link href="/discount" className="text-brand-400 hover:text-brand-300 transition">
+              See how to save &rarr;
+            </Link>
           </div>
         )}
 

@@ -8,7 +8,7 @@ export default function SearchBar({
   currentQuery,
   currentSet,
 }: {
-  sets: string[];
+  sets: { code: string; name: string }[];
   currentQuery: string;
   currentSet: string;
 }) {
@@ -48,7 +48,7 @@ export default function SearchBar({
       <input
         value={query}
         onChange={(e) => handleSearch(e.target.value)}
-        placeholder="Search by card number or SKU..."
+        placeholder="Search by name, card number, or SKU..."
         className="rounded bg-[#12121a] border border-[#1e1e2e] px-3 py-2 text-sm focus:border-brand-500 focus:outline-none w-72"
       />
       <select
@@ -58,8 +58,8 @@ export default function SearchBar({
       >
         <option value="">All Sets</option>
         {sets.map((s) => (
-          <option key={s} value={s}>
-            {s}
+          <option key={s.code} value={s.code}>
+            {s.code} — {s.name}
           </option>
         ))}
       </select>
