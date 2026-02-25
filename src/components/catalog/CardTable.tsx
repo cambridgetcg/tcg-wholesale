@@ -108,7 +108,7 @@ export default function CardTable({
                     </>
                   ) : (
                     <span className="font-medium text-green-400">
-                      {"\u00a3"}{price.toFixed(2)} ex-VAT
+                      {"\u00a3"}{price.toFixed(2)}
                     </span>
                   )}
                 </td>

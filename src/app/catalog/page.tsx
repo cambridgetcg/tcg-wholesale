@@ -1,7 +1,8 @@
+import { Suspense } from "react";
 import { db } from "@/lib/db";
-import { cards, clients } from "@/lib/db/schema";
+import { cards } from "@/lib/db/schema";
 import { like, or, eq, asc, desc, count, max, sql, SQL } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import { getVolumeDiscount } from "@/lib/get-volume-discount";
 import Nav from "@/components/Nav";
 import SearchBar from "@/components/catalog/SearchBar";
 import CardTable from "@/components/catalog/CardTable";
@@ -27,17 +28,8 @@ export default async function CatalogPage({
   const sortOrder = params.order === "desc" ? "desc" : "asc";
   const page = Math.max(1, parseInt(params.page || "1", 10) || 1);
 
-  // Get volume discount for current user
-  let volumeDiscountPct = 0;
-  const session = await auth();
-  if (session?.user?.id) {
-    const [client] = await db
-      .select({ volumeDiscountPct: clients.volumeDiscountPct })
-      .from(clients)
-      .where(eq(clients.id, Number(session.user.id)))
-      .limit(1);
-    if (client) volumeDiscountPct = client.volumeDiscountPct;
-  }
+  // Get volume discount for current user (cached per request)
+  const volumeDiscountPct = await getVolumeDiscount();
 
   // Build where conditions
   const conditions: SQL[] = [];
@@ -109,7 +101,9 @@ export default async function CatalogPage({
               </p>
             )}
           </div>
-          <SearchBar sets={sets} currentQuery={query} currentSet={setFilter} />
+          <Suspense>
+            <SearchBar sets={sets} currentQuery={query} currentSet={setFilter} />
+          </Suspense>
         </div>
 
         {volumeDiscountPct > 0 && (
@@ -118,14 +112,18 @@ export default async function CatalogPage({
           </div>
         )}
 
-        <CardTable
-          cards={allCards}
-          currentSort={sortField}
-          currentOrder={sortOrder}
-          volumeDiscountPct={volumeDiscountPct}
-        />
+        <Suspense>
+          <CardTable
+            cards={allCards}
+            currentSort={sortField}
+            currentOrder={sortOrder}
+            volumeDiscountPct={volumeDiscountPct}
+          />
+        </Suspense>
 
-        <Pagination currentPage={safePage} totalPages={totalPages} />
+        <Suspense>
+          <Pagination currentPage={safePage} totalPages={totalPages} />
+        </Suspense>
 
         <p className="mt-4 text-xs text-gray-500">
           {total} card{total !== 1 ? "s" : ""} total &middot; Prices ex-VAT

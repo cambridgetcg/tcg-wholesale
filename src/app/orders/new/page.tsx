@@ -31,6 +31,7 @@ export default function NewOrderPage() {
   const [cards, setCards] = useState<SearchCard[]>([]);
   const [search, setSearch] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     fetch("/api/cards?" + new URLSearchParams(search ? { q: search } : {}))
@@ -55,17 +56,24 @@ export default function NewOrderPage() {
   async function submitOrder() {
     if (items.length === 0) return;
     setSubmitting(true);
-    const res = await fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        items: items.map((i) => ({ cardId: i.card.id, quantity: i.quantity })),
-      }),
-    });
-    if (res.ok) {
-      const order = await res.json();
-      clear();
-      router.push(`/orders/${order.id}`);
+    setError("");
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          items: items.map((i) => ({ cardId: i.card.id, quantity: i.quantity })),
+        }),
+      });
+      if (res.ok) {
+        const order = await res.json();
+        clear();
+        router.push(`/orders/${order.id}`);
+      } else {
+        setError("Failed to submit order. Please try again.");
+      }
+    } catch {
+      setError("Network error. Please check your connection.");
     }
     setSubmitting(false);
   }
@@ -181,6 +189,9 @@ export default function NewOrderPage() {
                     </span>
                   </div>
                 </div>
+                {error && (
+                  <p className="text-sm text-red-400">{error}</p>
+                )}
                 <button
                   onClick={submitOrder}
                   disabled={submitting || items.length === 0}
