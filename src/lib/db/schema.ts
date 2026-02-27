@@ -186,6 +186,24 @@ export const conditionPrices = pgTable("condition_prices", {
   dateIdx: index("condition_prices_date_idx").on(table.snapshotDate),
 }));
 
+export const cartItems = pgTable("cart_items", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id),
+  cardId: integer("card_id").notNull().references(() => cards.id),
+  quantity: integer("quantity").notNull().default(1),
+  cardNumber: text("card_number").notNull(),
+  sku: text("sku").notNull(),
+  cardName: text("card_name").notNull().default(""),
+  setCode: text("set_code"),
+  setName: text("set_name"),
+  priceExVat: money("price_ex_vat").notNull(),
+  addedAt: timestamp("added_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  clientCardUnique: uniqueIndex("cart_items_client_card_idx").on(table.clientId, table.cardId),
+}));
+
+export type CartItemRow = typeof cartItems.$inferSelect;
 export type Client = typeof clients.$inferSelect;
 export type Game = typeof games.$inferSelect;
 export type GameSet = typeof sets.$inferSelect;

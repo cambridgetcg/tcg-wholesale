@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { orders, orderItems, cards, clients, orderStatusHistory } from "@/lib/db/schema";
+import { orders, orderItems, cards, clients, orderStatusHistory, cartItems } from "@/lib/db/schema";
 import { eq, and, gte } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { applyVolumeDiscount } from "@/lib/pricing";
@@ -101,6 +101,13 @@ export async function POST(req: NextRequest) {
     });
   } catch {
     // Audit log failure should not block order submission
+  }
+
+  // Clear server-persisted cart (belt-and-suspenders — client clear() also fires DELETE)
+  try {
+    await db.delete(cartItems).where(eq(cartItems.clientId, clientId));
+  } catch {
+    // Cart cleanup failure should not block order submission
   }
 
   // Notify admin of new order
