@@ -1,14 +1,19 @@
 "use server";
 
 import { signIn } from "@/lib/auth";
+import { headers } from "next/headers";
+import { isAdminHost } from "@/lib/subdomain";
 import { AuthError } from "next-auth";
 
 export async function login(email: string, password: string) {
+  const host = (await headers()).get("host") ?? "";
+  const redirectTo = isAdminHost(host) ? "/admin" : "/catalog";
+
   try {
     await signIn("credentials", {
       email: email.toLowerCase().trim(),
       password,
-      redirectTo: "/catalog",
+      redirectTo,
     });
   } catch (error) {
     if (error instanceof AuthError) {

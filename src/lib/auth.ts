@@ -5,8 +5,42 @@ import { db } from "./db";
 import { clients } from "./db/schema";
 import { eq } from "drizzle-orm";
 
+const isProd = process.env.NODE_ENV === "production";
+const cookieDomain = isProd ? ".wholesaletcgdirect.com" : undefined;
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
+  cookies: {
+    sessionToken: {
+      name: isProd ? "__Secure-authjs.session-token" : "authjs.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+        domain: cookieDomain,
+      },
+    },
+    csrfToken: {
+      name: isProd ? "__Host-authjs.csrf-token" : "authjs.csrf-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+      },
+    },
+    callbackUrl: {
+      name: isProd ? "__Secure-authjs.callback-url" : "authjs.callback-url",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: isProd,
+        domain: cookieDomain,
+      },
+    },
+  },
   providers: [
     Credentials({
       credentials: {
