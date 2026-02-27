@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { useCatalogFilter } from "./CatalogFilterContext";
 
 interface CategoryToggleProps {
   currentCategory: string;
@@ -9,13 +10,14 @@ interface CategoryToggleProps {
 export default function CategoryToggle({ currentCategory }: CategoryToggleProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { startFilter } = useCatalogFilter();
 
   function selectCategory(cat: string) {
     const params = new URLSearchParams(searchParams.toString());
     if (cat === "singles") params.delete("category");
     else params.set("category", cat);
     params.delete("page");
-    router.push(`/catalog?${params.toString()}`);
+    startFilter(() => router.push(`/catalog?${params.toString()}`));
   }
 
   const categories = [

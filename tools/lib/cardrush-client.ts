@@ -78,7 +78,8 @@ async function fetchWithProxy(url: string, proxyUrl: string): Promise<string> {
 }
 
 export async function fetchProductGroupPages(
-  productGroupId: number
+  productGroupId: number,
+  maxPages: number = 20
 ): Promise<string[]> {
   const pages: string[] = [];
   let page = 1;
@@ -108,8 +109,49 @@ export async function fetchProductGroupPages(
     }
 
     // Safety limit
-    if (page >= 20) {
-      console.log(`  Reached page limit (20), stopping`);
+    if (page >= maxPages) {
+      console.log(`  Reached page limit (${maxPages}), stopping`);
+      break;
+    }
+
+    page++;
+    await sleep(REQUEST_DELAY_MS);
+  }
+
+  console.log(`  Fetched ${pages.length} page(s)`);
+  return pages;
+}
+
+export async function fetchProductListPages(
+  listId: number,
+  maxPages: number = 20
+): Promise<string[]> {
+  const pages: string[] = [];
+  let page = 1;
+
+  while (true) {
+    const url = `${CARDRUSH_BASE_URL}/product-list/${listId}?page=${page}`;
+    console.log(`  Fetching page ${page}: ${url}`);
+
+    const html = await fetchWithRetry(url);
+
+    const itemCount = (html.match(/list_item_cell/g) || []).length;
+    console.log(`    ${itemCount} items on page ${page}`);
+
+    if (itemCount === 0) {
+      console.log(`  Page ${page} has no items, stopping`);
+      break;
+    }
+
+    pages.push(html);
+
+    if (itemCount < ITEMS_PER_PAGE) {
+      console.log(`  Page ${page} has ${itemCount} < ${ITEMS_PER_PAGE} items (last page)`);
+      break;
+    }
+
+    if (page >= maxPages) {
+      console.log(`  Reached page limit (${maxPages}), stopping`);
       break;
     }
 

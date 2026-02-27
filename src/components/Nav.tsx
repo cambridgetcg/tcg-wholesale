@@ -22,6 +22,9 @@ export default function Nav() {
           <Link href="/orders" className="hover:text-brand-500 transition">
             Orders
           </Link>
+          <Link href="/discount" className="hover:text-brand-500 transition">
+            Discounts
+          </Link>
           {isAdmin && (
             <Link href="/admin" className="hover:text-brand-500 transition">
               Admin
@@ -40,7 +43,10 @@ export default function Nav() {
           )}
           <span className="text-gray-500">{session?.user?.email}</span>
           <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            onClick={() => {
+              localStorage.removeItem("tcg-cart");
+              signOut({ callbackUrl: "/login" });
+            }}
             className="rounded bg-gray-800 px-3 py-1 text-xs hover:bg-gray-700 transition"
           >
             Sign Out

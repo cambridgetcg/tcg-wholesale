@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
+import { useCatalogFilter } from "./CatalogFilterContext";
 
 export default function Pagination({
   currentPage,
@@ -11,6 +12,7 @@ export default function Pagination({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { startFilter } = useCatalogFilter();
 
   if (totalPages <= 1) return null;
 
@@ -18,7 +20,7 @@ export default function Pagination({
     const params = new URLSearchParams(searchParams.toString());
     if (page <= 1) params.delete("page");
     else params.set("page", String(page));
-    router.push(`/catalog?${params.toString()}`);
+    startFilter(() => router.push(`/catalog?${params.toString()}`));
   }
 
   return (

@@ -5,9 +5,10 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Nav from "@/components/Nav";
 import StatusBadge from "@/components/StatusBadge";
+import CardThumbnail from "@/components/CardThumbnail";
 import { VAT_RATE } from "@/lib/pricing";
 
-const statusSteps = ["draft", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered"];
+const statusSteps = ["submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered"];
 
 export default async function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -30,13 +31,15 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       originalUnitPrice: orderItems.originalUnitPrice,
       lineTotal: orderItems.lineTotal,
       cardNumber: cards.cardNumber,
-      cardName: cards.name,
+      sku: cards.sku,
+      imageUrl: cards.imageUrl,
     })
     .from(orderItems)
     .innerJoin(cards, eq(orderItems.cardId, cards.id))
     .where(eq(orderItems.orderId, orderId));
 
-  const currentIdx = statusSteps.indexOf(order.status);
+  const isCancelled = order.status === "cancelled";
+  const currentIdx = isCancelled ? -1 : statusSteps.indexOf(order.status);
   const isQuoted = order.status === "quoted";
   const quoteExpired = isQuoted && order.quotedExpiresAt && order.quotedExpiresAt < new Date();
 
@@ -74,22 +77,28 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         )}
 
         {/* Status timeline */}
-        <div className="mb-8 flex items-center gap-1 overflow-x-auto">
-          {statusSteps.map((step, i) => (
-            <div key={step} className="flex items-center">
-              <div
-                className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  i <= currentIdx ? "bg-brand-600 text-white" : "bg-gray-800 text-gray-500"
-                }`}
-              >
-                {step.charAt(0).toUpperCase() + step.slice(1)}
+        {isCancelled ? (
+          <div className="mb-8 rounded-lg bg-red-900/20 border border-red-700/30 px-4 py-3 text-sm text-red-300">
+            This order has been cancelled.
+          </div>
+        ) : (
+          <div className="mb-8 flex items-center gap-1 overflow-x-auto">
+            {statusSteps.map((step, i) => (
+              <div key={step} className="flex items-center">
+                <div
+                  className={`rounded-full px-3 py-1 text-xs font-medium ${
+                    i <= currentIdx ? "bg-brand-600 text-white" : "bg-gray-800 text-gray-500"
+                  }`}
+                >
+                  {step.charAt(0).toUpperCase() + step.slice(1)}
+                </div>
+                {i < statusSteps.length - 1 && (
+                  <div className={`h-0.5 w-6 ${i < currentIdx ? "bg-brand-600" : "bg-gray-800"}`} />
+                )}
               </div>
-              {i < statusSteps.length - 1 && (
-                <div className={`h-0.5 w-6 ${i < currentIdx ? "bg-brand-600" : "bg-gray-800"}`} />
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Items table */}
@@ -97,7 +106,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <table className="w-full text-sm">
               <thead className="bg-[#12121a]">
                 <tr className="text-left text-gray-400">
+                  <th className="w-12 px-4 py-3 font-medium"></th>
                   <th className="px-4 py-3 font-medium">Card #</th>
+                  <th className="px-4 py-3 font-medium">SKU</th>
                   <th className="px-4 py-3 font-medium text-right">Unit Price</th>
                   <th className="px-4 py-3 font-medium text-right">Qty</th>
                   <th className="px-4 py-3 font-medium text-right">Line Total</th>
@@ -109,10 +120,17 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                     && Math.abs(item.originalUnitPrice - item.unitPriceExVat) >= 0.01;
                   return (
                     <tr key={item.id}>
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-brand-500">{item.cardNumber}</span>{" "}
-                        {item.cardName}
+                      <td className="px-4 py-1">
+                        {item.imageUrl ? (
+                          <CardThumbnail src={item.imageUrl} alt={item.cardNumber} />
+                        ) : (
+                          <div className="h-10 w-7 rounded bg-[#1e1e2e]" />
+                        )}
                       </td>
+                      <td className="px-4 py-3">
+                        <span className="font-mono text-brand-500">{item.cardNumber}</span>
+                      </td>
+                      <td className="px-4 py-3 text-gray-400 font-mono text-xs">{item.sku}</td>
                       <td className="px-4 py-3 text-right">
                         {priceChanged ? (
                           <span>

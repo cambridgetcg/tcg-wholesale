@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { orderItems, orders, cards } from "@/lib/db/schema";
+import { orderItems, orders, cards, orderStatusHistory } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { calculatePrice } from "@/lib/pricing";
@@ -36,6 +36,7 @@ export async function POST(
       originalUnitPrice: orderItems.originalUnitPrice,
       stockStatus: orderItems.stockStatus,
       checkedPriceJpy: orderItems.checkedPriceJpy,
+      checkedQuantity: orderItems.checkedQuantity,
     })
     .from(orderItems)
     .where(eq(orderItems.orderId, orderId));
@@ -64,6 +65,12 @@ export async function POST(
     if (!card || !card.gbpJpyRate) continue;
 
     const newPrice = calculatePrice(item.checkedPriceJpy!, card.gbpJpyRate);
+    // Sanity check: reject prices that are negative or more than 10x the original
+    if (newPrice.priceExVat <= 0 || (item.unitPriceExVat > 0 && newPrice.priceExVat > item.unitPriceExVat * 10)) {
+      return NextResponse.json({
+        error: `Calculated price £${newPrice.priceExVat.toFixed(2)} for item #${item.id} is unreasonable (original: £${item.unitPriceExVat.toFixed(2)})`,
+      }, { status: 400 });
+    }
     const lineTotal = Math.round(newPrice.priceExVat * item.quantity * 100) / 100;
 
     await db.update(orderItems)
@@ -74,6 +81,37 @@ export async function POST(
       })
       .where(eq(orderItems.id, item.id));
     updatedCount++;
+  }
+
+  // Update partial items — reduce quantity and optionally recalculate price
+  let partialCount = 0;
+  const partialItems = items.filter((i) => i.stockStatus === "partial" && i.checkedQuantity != null);
+  for (const item of partialItems) {
+    let unitPrice = item.unitPriceExVat;
+
+    // If a new JPY price was also provided, recalculate unit price
+    if (item.checkedPriceJpy != null) {
+      const [card] = await db.select().from(cards).where(eq(cards.id, item.cardId)).limit(1);
+      if (card?.gbpJpyRate) {
+        const newPrice = calculatePrice(item.checkedPriceJpy, card.gbpJpyRate);
+        if (newPrice.priceExVat > 0 && (item.unitPriceExVat === 0 || newPrice.priceExVat <= item.unitPriceExVat * 10)) {
+          unitPrice = newPrice.priceExVat;
+        }
+      }
+    }
+
+    const newQty = item.checkedQuantity!;
+    const lineTotal = Math.round(unitPrice * newQty * 100) / 100;
+
+    await db.update(orderItems)
+      .set({
+        quantity: newQty,
+        unitPriceExVat: unitPrice,
+        originalUnitPrice: item.originalUnitPrice ?? item.unitPriceExVat,
+        lineTotal,
+      })
+      .where(eq(orderItems.id, item.id));
+    partialCount++;
   }
 
   // Recalculate order total from remaining items
@@ -93,6 +131,16 @@ export async function POST(
       updatedAt: now,
     })
     .where(eq(orders.id, orderId));
+
+  // Record status change in audit log
+  await db.insert(orderStatusHistory).values({
+    orderId,
+    fromStatus: "submitted",
+    toStatus: "quoted",
+    changedBy: parseInt(session.user.id),
+    changedAt: now,
+    note: `Stock check complete: ${removedCount} removed, ${updatedCount} price updated, ${partialCount} partial`,
+  });
 
   // Send quote ready email to client
   try {

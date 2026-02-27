@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import CardThumbnail from "@/components/CardThumbnail";
 
 interface StockItem {
   id: number;
   cardId: number;
   cardNumber: string;
-  cardName: string | null;
+  imageUrl: string | null;
   cardrushUrl: string | null;
   cardrushJpy: number | null;
   gbpJpyRate: number | null;
@@ -17,6 +18,7 @@ interface StockItem {
   lineTotal: number;
   stockStatus: string;
   checkedPriceJpy: number | null;
+  checkedQuantity: number | null;
   priceDiffPct: number | null;
   currentCalcPrice: number | null;
 }
@@ -44,23 +46,32 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
     }
     return inputs;
   });
+  const [qtyInputs, setQtyInputs] = useState<Record<number, string>>(() => {
+    const inputs: Record<number, string> = {};
+    for (const item of initialItems) {
+      if (item.checkedQuantity != null) {
+        inputs[item.id] = item.checkedQuantity.toString();
+      }
+    }
+    return inputs;
+  });
 
   const checkedCount = items.filter((i) => i.stockStatus !== "pending").length;
   const allChecked = checkedCount === items.length;
 
-  async function updateItemStatus(itemId: number, stockStatus: string, checkedPriceJpy?: number) {
+  async function updateItemStatus(itemId: number, stockStatus: string, checkedPriceJpy?: number, checkedQuantity?: number) {
     setSaving(itemId);
     setError(null);
     try {
       const res = await fetch(`/api/orders/${orderId}/items/${itemId}/stock`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stockStatus, checkedPriceJpy }),
+        body: JSON.stringify({ stockStatus, checkedPriceJpy, checkedQuantity }),
       });
       if (res.ok) {
         setItems((prev) =>
           prev.map((i) =>
-            i.id === itemId ? { ...i, stockStatus, checkedPriceJpy: checkedPriceJpy ?? null } : i
+            i.id === itemId ? { ...i, stockStatus, checkedPriceJpy: checkedPriceJpy ?? null, checkedQuantity: checkedQuantity ?? null } : i
           )
         );
       } else {
@@ -107,6 +118,11 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
       return active
         ? `${base} bg-amber-600 text-white`
         : `${base} bg-amber-900/20 text-amber-400 hover:bg-amber-900/40`;
+    }
+    if (buttonStatus === "partial") {
+      return active
+        ? `${base} bg-orange-600 text-white`
+        : `${base} bg-orange-900/20 text-orange-400 hover:bg-orange-900/40`;
     }
     return base;
   }
@@ -168,15 +184,23 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
                 ? "border-green-900/50 bg-green-900/10"
                 : item.stockStatus === "out_of_stock"
                 ? "border-red-900/50 bg-red-900/10"
+                : item.stockStatus === "partial"
+                ? "border-orange-900/50 bg-orange-900/10"
                 : "border-amber-900/50 bg-amber-900/10"
             }`}
           >
             {/* Item header */}
             <div className="flex items-start justify-between gap-4">
+              <div className="shrink-0">
+                {item.imageUrl ? (
+                  <CardThumbnail src={item.imageUrl} alt={item.cardNumber} className="h-12 w-auto" />
+                ) : (
+                  <div className="h-12 w-9 rounded bg-[#1e1e2e]" />
+                )}
+              </div>
               <div className="flex-1">
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-sm font-medium text-brand-500">{item.cardNumber}</span>
-                  <span className="text-sm text-gray-300">{item.cardName}</span>
                 </div>
                 <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                   <span>¥{item.cardrushJpy?.toLocaleString() ?? "—"}</span>
@@ -236,6 +260,31 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
               >
                 Price Changed
               </button>
+              <button
+                onClick={() => {
+                  const qty = parseInt(qtyInputs[item.id] || "");
+                  if (!isNaN(qty) && qty >= 1 && qty < item.quantity) {
+                    const jpy = parseInt(priceInputs[item.id] || "");
+                    updateItemStatus(item.id, "partial", !isNaN(jpy) && jpy > 0 ? jpy : undefined, qty);
+                  }
+                }}
+                disabled={saving === item.id || !qtyInputs[item.id]}
+                className={statusClasses(item.stockStatus, "partial")}
+              >
+                Partial
+              </button>
+              <div className="flex items-center gap-1 ml-1">
+                <span className="text-xs text-gray-500">Qty</span>
+                <input
+                  type="number"
+                  min="1"
+                  max={item.quantity - 1}
+                  placeholder={`/${item.quantity}`}
+                  value={qtyInputs[item.id] || ""}
+                  onChange={(e) => setQtyInputs((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                  className="w-16 rounded bg-[#1a1a2e] border border-[#2a2a3e] px-2 py-1 text-xs focus:border-brand-500 focus:outline-none"
+                />
+              </div>
               <div className="flex items-center gap-1 ml-1">
                 <span className="text-xs text-gray-500">¥</span>
                 <input

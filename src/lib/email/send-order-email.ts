@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { orders, orderItems, cards, clients, notifications } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 import { resend, notificationFrom } from "./resend";
 import {
   quoteReady,
@@ -67,6 +67,7 @@ export async function sendOrderEmail(
         .select()
         .from(clients)
         .where(eq(clients.role, "admin"))
+        .orderBy(asc(clients.createdAt))
         .limit(1);
       recipient = admin?.email ?? client.email;
     } else {

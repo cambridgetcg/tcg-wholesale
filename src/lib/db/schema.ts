@@ -6,7 +6,9 @@ import {
   boolean,
   real,
   timestamp,
+  date,
   uniqueIndex,
+  index,
   customType,
 } from "drizzle-orm/pg-core";
 
@@ -73,15 +75,21 @@ export const cards = pgTable("cards", {
   setId: integer("set_id").references(() => sets.id),
   category: text("category", { enum: ["singles", "sealed"] }).notNull().default("singles"),
   productType: text("product_type"),
+  rarity: text("rarity"),
   imageUrl: text("image_url"),
-});
+}, (table) => ({
+  nameIdx: index("cards_name_idx").on(table.name),
+  cardNumberIdx: index("cards_card_number_idx").on(table.cardNumber),
+  gameCategoryIdx: index("cards_game_category_idx").on(table.gameId, table.category),
+  setCodeIdx: index("cards_set_code_idx").on(table.setCode),
+}));
 
 export const orders = pgTable("orders", {
   id: serial("id").primaryKey(),
   clientId: integer("client_id").notNull().references(() => clients.id),
   status: text("status", {
-    enum: ["draft", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"],
-  }).notNull().default("draft"),
+    enum: ["submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"],
+  }).notNull().default("submitted"),
   totalExVat: money("total_ex_vat").notNull().default(0),
   volumeDiscount: real("volume_discount").notNull().default(0),
   notes: text("notes"),
@@ -102,9 +110,10 @@ export const orderItems = pgTable("order_items", {
   originalUnitPrice: money("original_unit_price"),
   lineTotal: money("line_total").notNull(),
   stockStatus: text("stock_status", {
-    enum: ["pending", "in_stock", "out_of_stock", "price_changed"],
+    enum: ["pending", "in_stock", "out_of_stock", "price_changed", "partial"],
   }).notNull().default("pending"),
   checkedPriceJpy: integer("checked_price_jpy"),
+  checkedQuantity: integer("checked_quantity"),
 });
 
 export const priceHistory = pgTable("price_history", {
@@ -129,6 +138,54 @@ export const notifications = pgTable("notifications", {
   sentAt: timestamp("sent_at").defaultNow(),
 });
 
+export const priceArchive = pgTable("price_archive", {
+  id: serial("id").primaryKey(),
+  cardId: integer("card_id").notNull().references(() => cards.id),
+  snapshotDate: date("snapshot_date").notNull(),
+  sku: text("sku").notNull(),
+  setCode: text("set_code"),
+  category: text("category", { enum: ["singles", "sealed"] }).notNull().default("singles"),
+  cardrushJpy: integer("cardrush_jpy").notNull(),
+  gbpJpyRate: real("gbp_jpy_rate").notNull(),
+  baseGbp: money("base_gbp").notNull(),
+  priceExVat: money("price_ex_vat").notNull(),
+}, (table) => ({
+  cardDateUnique: uniqueIndex("price_archive_card_date_idx").on(table.cardId, table.snapshotDate),
+  dateIdx: index("price_archive_date_idx").on(table.snapshotDate),
+  skuIdx: index("price_archive_sku_idx").on(table.sku),
+}));
+
+export const orderStatusHistory = pgTable("order_status_history", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  fromStatus: text("from_status").notNull(),
+  toStatus: text("to_status").notNull(),
+  changedBy: integer("changed_by").references(() => clients.id),
+  changedAt: timestamp("changed_at").defaultNow(),
+  note: text("note"),
+}, (table) => ({
+  orderIdx: index("order_status_history_order_idx").on(table.orderId),
+}));
+
+export const conditionPrices = pgTable("condition_prices", {
+  id: serial("id").primaryKey(),
+  cardNumber: text("card_number").notNull(),
+  name: text("name").notNull(),
+  setCode: text("set_code"),
+  rarity: text("rarity"),
+  condition: text("condition").notNull(),
+  priceJpy: integer("price_jpy").notNull(),
+  stock: integer("stock").notNull().default(0),
+  cardrushUrl: text("cardrush_url"),
+  imageUrl: text("image_url"),
+  snapshotDate: date("snapshot_date").notNull(),
+  discountPct: real("discount_pct"),
+}, (table) => ({
+  cardCondDateUnique: uniqueIndex("condition_prices_card_cond_date_idx")
+    .on(table.cardNumber, table.name, table.condition, table.snapshotDate),
+  dateIdx: index("condition_prices_date_idx").on(table.snapshotDate),
+}));
+
 export type Client = typeof clients.$inferSelect;
 export type Game = typeof games.$inferSelect;
 export type GameSet = typeof sets.$inferSelect;
@@ -136,4 +193,7 @@ export type Card = typeof cards.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type PriceHistory = typeof priceHistory.$inferSelect;
+export type PriceArchiveRow = typeof priceArchive.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type OrderStatusHistoryRow = typeof orderStatusHistory.$inferSelect;
+export type ConditionPriceRow = typeof conditionPrices.$inferSelect;

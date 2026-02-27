@@ -6,6 +6,7 @@ import { clients } from "./db/schema";
 import { eq } from "drizzle-orm";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
@@ -13,7 +14,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const email = credentials?.email as string;
+        const email = (credentials?.email as string)?.toLowerCase().trim();
         const password = credentials?.password as string;
         if (!email || !password) return null;
 
@@ -23,7 +24,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           .where(eq(clients.email, email))
           .limit(1);
 
-        if (!user || !compareSync(password, user.passwordHash)) return null;
+        if (!user) return null;
+        if (!compareSync(password, user.passwordHash)) return null;
 
         return {
           id: String(user.id),
@@ -37,15 +39,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     jwt({ token, user }) {
       if (user) {
-        token.role = (user as { role: string }).role;
+        token.role = user.role;
         token.id = user.id;
       }
       return token;
     },
     session({ session, token }) {
-      if (session.user) {
-        (session.user as { role: string }).role = token.role as string;
-        (session.user as { id: string }).id = token.id as string;
+      if (session.user && token.id) {
+        session.user.id = String(token.id);
+        session.user.role = (token.role as string) ?? "client";
       }
       return session;
     },
@@ -53,5 +55,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/login",
   },
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
 });

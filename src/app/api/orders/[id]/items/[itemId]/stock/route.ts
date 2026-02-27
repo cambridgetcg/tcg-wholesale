@@ -4,7 +4,7 @@ import { orderItems, orders } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 
-const validStatuses = ["pending", "in_stock", "out_of_stock", "price_changed"] as const;
+const validStatuses = ["pending", "in_stock", "out_of_stock", "price_changed", "partial"] as const;
 
 export async function PATCH(
   req: NextRequest,
@@ -41,21 +41,38 @@ export async function PATCH(
   const body = await req.json() as {
     stockStatus: string;
     checkedPriceJpy?: number;
+    checkedQuantity?: number;
   };
 
   if (!validStatuses.includes(body.stockStatus as typeof validStatuses[number])) {
     return NextResponse.json({ error: "Invalid stock status" }, { status: 400 });
   }
 
+  if (body.stockStatus === "partial") {
+    if (body.checkedQuantity == null || body.checkedQuantity < 1) {
+      return NextResponse.json({ error: "Partial status requires checkedQuantity >= 1" }, { status: 400 });
+    }
+    if (body.checkedQuantity >= item.quantity) {
+      return NextResponse.json({ error: "Partial quantity must be less than ordered quantity" }, { status: 400 });
+    }
+  }
+
   const update: Record<string, unknown> = {
     stockStatus: body.stockStatus,
   };
 
-  // Only store checkedPriceJpy when status is price_changed
-  if (body.stockStatus === "price_changed" && body.checkedPriceJpy != null) {
+  // Only store checkedPriceJpy when status is price_changed or partial
+  if ((body.stockStatus === "price_changed" || body.stockStatus === "partial") && body.checkedPriceJpy != null) {
     update.checkedPriceJpy = body.checkedPriceJpy;
   } else {
     update.checkedPriceJpy = null;
+  }
+
+  // Only store checkedQuantity when status is partial
+  if (body.stockStatus === "partial" && body.checkedQuantity != null) {
+    update.checkedQuantity = body.checkedQuantity;
+  } else {
+    update.checkedQuantity = null;
   }
 
   await db.update(orderItems).set(update).where(eq(orderItems.id, orderItemId));

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCart, type CardData } from "@/lib/cart-context";
 import { applyVolumeDiscount } from "@/lib/pricing";
+import { useCatalogFilter } from "./CatalogFilterContext";
+import WatermarkedImage from "./WatermarkedImage";
 
 interface CardRow {
   id: number;
@@ -13,6 +15,8 @@ interface CardRow {
   setCode: string | null;
   setName: string | null;
   priceExVat: number | null;
+  rarity: string | null;
+  imageUrl: string | null;
 }
 
 export default function CardTable({
@@ -20,15 +24,18 @@ export default function CardTable({
   currentSort,
   currentOrder,
   volumeDiscountPct,
+  lastSynced,
 }: {
   cards: CardRow[];
   currentSort: string;
   currentOrder: string;
   volumeDiscountPct: number;
+  lastSynced: string | null;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addItem } = useCart();
+  const { isPending, startFilter } = useCatalogFilter();
 
   function toggleSort(column: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -39,7 +46,7 @@ export default function CardTable({
       params.set("sort", column);
       params.set("order", "asc");
     }
-    router.push(`/catalog?${params.toString()}`);
+    startFilter(() => router.push(`/catalog?${params.toString()}`));
   }
 
   function sortIndicator(column: string) {
@@ -48,6 +55,7 @@ export default function CardTable({
   }
 
   const [quantities, setQuantities] = useState<Record<number, number>>({});
+  const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
 
   function handleAdd(card: CardRow) {
     const qty = quantities[card.id] || 1;
@@ -64,10 +72,12 @@ export default function CardTable({
   }
 
   return (
-    <div className="overflow-hidden rounded-lg border border-[#1e1e2e]">
+    <>
+    <div className={`overflow-hidden rounded-lg border border-[#1e1e2e] transition-opacity ${isPending ? "opacity-50 pointer-events-none" : ""}`}>
       <table className="w-full text-sm">
         <thead className="bg-[#12121a]">
           <tr className="text-left text-gray-400">
+            <th className="px-4 py-3 font-medium w-14"></th>
             <th
               className="px-4 py-3 font-medium cursor-pointer hover:text-gray-200 transition select-none"
               onClick={() => toggleSort("cardNumber")}
@@ -81,11 +91,15 @@ export default function CardTable({
             >
               Set{sortIndicator("set")}
             </th>
+            <th className="px-4 py-3 font-medium">Type</th>
             <th
               className="px-4 py-3 font-medium text-right cursor-pointer hover:text-gray-200 transition select-none"
               onClick={() => toggleSort("price")}
             >
               Price (ex-VAT){sortIndicator("price")}
+              {lastSynced && (
+                <div className="text-[10px] text-gray-500 font-normal">{lastSynced}</div>
+              )}
             </th>
             <th className="px-4 py-3 font-medium text-right"></th>
           </tr>
@@ -99,6 +113,21 @@ export default function CardTable({
 
             return (
               <tr key={card.id} className="hover:bg-[#12121a] transition">
+                <td className="px-4 py-1">
+                  {card.imageUrl ? (
+                    <img
+                      src={card.imageUrl}
+                      alt={card.cardNumber}
+                      className="h-10 w-auto rounded cursor-pointer hover:opacity-80 transition select-none"
+                      loading="lazy"
+                      draggable={false}
+                      onContextMenu={(e) => e.preventDefault()}
+                      onClick={() => setExpandedImage({ url: card.imageUrl!, alt: card.cardNumber })}
+                    />
+                  ) : (
+                    <div className="h-10 w-7 rounded bg-[#1e1e2e]" />
+                  )}
+                </td>
                 <td className="px-4 py-3 font-mono text-brand-500">
                   {card.cardNumber}
                 </td>
@@ -106,6 +135,9 @@ export default function CardTable({
                   {card.sku}
                 </td>
                 <td className="px-4 py-3 text-gray-400">{card.setCode}</td>
+                <td className="px-4 py-3 text-gray-400 text-xs font-mono">
+                  {card.rarity ?? "—"}
+                </td>
                 <td className="px-4 py-3 text-right">
                   {volumeDiscountPct > 0 ? (
                     <>
@@ -149,7 +181,7 @@ export default function CardTable({
           })}
           {cards.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+              <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                 No cards found. Try adjusting your search or filters.
               </td>
             </tr>
@@ -157,5 +189,21 @@ export default function CardTable({
         </tbody>
       </table>
     </div>
+
+      {expandedImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setExpandedImage(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <WatermarkedImage
+              src={expandedImage.url}
+              alt={expandedImage.alt}
+              style="diagonal-repeat"
+            />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

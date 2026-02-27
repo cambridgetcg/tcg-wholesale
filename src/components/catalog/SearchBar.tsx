@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useRef, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useCatalogFilter } from "./CatalogFilterContext";
 
 export default function SearchBar({
   sets,
@@ -9,21 +10,27 @@ export default function SearchBar({
   currentSet,
   currentSort,
   currentOrder,
+  currentPriceMin,
+  currentPriceMax,
 }: {
   sets: { code: string; name: string }[];
   currentQuery: string;
   currentSet: string;
   currentSort: string;
   currentOrder: string;
+  currentPriceMin: string;
+  currentPriceMax: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { startFilter } = useCatalogFilter();
   const [query, setQuery] = useState(currentQuery);
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
+  const [priceMin, setPriceMin] = useState(currentPriceMin);
+  const [priceMax, setPriceMax] = useState(currentPriceMax);
 
-  useEffect(() => {
-    setQuery(currentQuery);
-  }, [currentQuery]);
+  useEffect(() => { setQuery(currentQuery); }, [currentQuery]);
+  useEffect(() => { setPriceMin(currentPriceMin); }, [currentPriceMin]);
+  useEffect(() => { setPriceMax(currentPriceMax); }, [currentPriceMax]);
 
   function pushParams(overrides: Record<string, string>) {
     const params = new URLSearchParams(searchParams.toString());
@@ -32,29 +39,40 @@ export default function SearchBar({
       else params.delete(k);
     }
     params.delete("page"); // reset to page 1 on filter change
-    router.push(`/catalog?${params.toString()}`);
+    startFilter(() => router.push(`/catalog?${params.toString()}`));
   }
 
-  function handleSearch(value: string) {
-    setQuery(value);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      pushParams({ q: value });
-    }, 300);
+  function submitSearch() {
+    pushParams({ q: query });
   }
 
   function handleSetChange(value: string) {
     pushParams({ set: value });
   }
 
+  function handlePriceChange(min: string, max: string) {
+    setPriceMin(min);
+    setPriceMax(max);
+    pushParams({ priceMin: min, priceMax: max });
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <input
-        value={query}
-        onChange={(e) => handleSearch(e.target.value)}
-        placeholder="Search by name, card number, or SKU..."
-        className="rounded bg-[#12121a] border border-[#1e1e2e] px-3 py-2 text-sm focus:border-brand-500 focus:outline-none w-72"
-      />
+      <div className="flex">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") submitSearch(); }}
+          placeholder="Search by name, card number, or SKU..."
+          className="rounded-l bg-[#12121a] border border-[#1e1e2e] border-r-0 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none w-72"
+        />
+        <button
+          onClick={submitSearch}
+          className="rounded-r bg-brand-600 px-3 py-2 text-sm font-medium hover:bg-brand-700 transition"
+        >
+          Search
+        </button>
+      </div>
       <select
         value={currentSet}
         onChange={(e) => handleSetChange(e.target.value)}
@@ -67,6 +85,28 @@ export default function SearchBar({
           </option>
         ))}
       </select>
+      <div className="flex items-center gap-1">
+        <span className="text-xs text-gray-500">{"\u00a3"}</span>
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          value={priceMin}
+          onChange={(e) => handlePriceChange(e.target.value, priceMax)}
+          placeholder="Min"
+          className="w-20 rounded bg-[#12121a] border border-[#1e1e2e] px-2 py-2 text-sm text-center focus:border-brand-500 focus:outline-none"
+        />
+        <span className="text-xs text-gray-500">–</span>
+        <input
+          type="number"
+          min={0}
+          step="0.01"
+          value={priceMax}
+          onChange={(e) => handlePriceChange(priceMin, e.target.value)}
+          placeholder="Max"
+          className="w-20 rounded bg-[#12121a] border border-[#1e1e2e] px-2 py-2 text-sm text-center focus:border-brand-500 focus:outline-none"
+        />
+      </div>
       <select
         value={`${currentSort}-${currentOrder}`}
         onChange={(e) => {

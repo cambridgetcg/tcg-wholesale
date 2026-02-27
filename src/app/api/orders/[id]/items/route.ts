@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { orders, orderItems, cards } from "@/lib/db/schema";
+import { orders, orderItems, cards, orderStatusHistory } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 
@@ -11,12 +11,22 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const { id } = await params;
+  const orderId = parseInt(id);
+  if (isNaN(orderId)) {
+    return NextResponse.json({ error: "Invalid order ID" }, { status: 400 });
+  }
+
+  const [order] = await db.select({ id: orders.id }).from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) {
+    return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  }
+
   const items = await db
     .select({
       id: orderItems.id,
       cardId: orderItems.cardId,
       cardNumber: cards.cardNumber,
-      cardName: cards.name,
+      imageUrl: cards.imageUrl,
       cardrushJpy: cards.cardrushJpy,
       cardrushUrl: cards.cardrushUrl,
       quantity: orderItems.quantity,
@@ -26,7 +36,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     })
     .from(orderItems)
     .innerJoin(cards, eq(orderItems.cardId, cards.id))
-    .where(eq(orderItems.orderId, parseInt(id)));
+    .where(eq(orderItems.orderId, orderId));
 
   return NextResponse.json(items);
 }
@@ -101,6 +111,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       updatedAt: quotedAt,
     })
     .where(eq(orders.id, orderId));
+
+  // Record status change in audit log
+  await db.insert(orderStatusHistory).values({
+    orderId,
+    fromStatus: "submitted",
+    toStatus: "quoted",
+    changedBy: parseInt(session.user.id),
+    changedAt: quotedAt,
+    note: `Quote sent: ${unavailableIds.length} items removed, ${availableItems.length} items quoted`,
+  });
 
   const [updated] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   return NextResponse.json(updated);

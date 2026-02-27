@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { orders, orderItems, clients } from "@/lib/db/schema";
+import { orders, orderItems, clients, orderStatusHistory } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { sendOrderEmail } from "@/lib/email/send-order-email";
-
-const validStatuses = ["draft", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"] as const;
+import { isValidTransition, type OrderStatus } from "@/lib/order-transitions";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -19,6 +18,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     status?: string;
     items?: { id: number; unitPriceExVat: number }[];
   };
+
+  // Fetch current order
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) {
+    return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  }
 
   // Update line item prices if provided (for quote adjustments)
   if (body.items?.length) {
@@ -40,43 +45,60 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Update status if provided
   if (body.status) {
-    if (!validStatuses.includes(body.status as typeof validStatuses[number])) {
-      return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    const fromStatus = order.status as OrderStatus;
+    const toStatus = body.status as OrderStatus;
+
+    // Validate transition
+    if (!isValidTransition(fromStatus, toStatus)) {
+      return NextResponse.json({
+        error: `Cannot transition from "${fromStatus}" to "${toStatus}"`,
+      }, { status: 400 });
     }
+
+    // Enforce quote expiry when confirming
+    if (toStatus === "confirmed" && order.quotedExpiresAt && order.quotedExpiresAt < new Date()) {
+      return NextResponse.json({
+        error: "Quote has expired. Please request a new quote.",
+      }, { status: 400 });
+    }
+
     const now = new Date();
     const statusUpdate: Record<string, unknown> = {
-      status: body.status as typeof validStatuses[number],
+      status: toStatus,
       updatedAt: now,
     };
-
-    // Set quote timestamps when transitioning to "quoted"
-    if (body.status === "quoted") {
-      statusUpdate.quotedAt = now;
-      statusUpdate.quotedExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
-    }
 
     await db.update(orders)
       .set(statusUpdate)
       .where(eq(orders.id, orderId));
 
+    // Record status change in audit log (non-fatal — table may not exist yet)
+    try {
+      await db.insert(orderStatusHistory).values({
+        orderId,
+        fromStatus,
+        toStatus,
+        changedBy: parseInt(session.user.id),
+        changedAt: now,
+      });
+    } catch {
+      // Audit log failure should not block status update
+    }
+
     // When order becomes "paid", add its total to client's currentMonthSpend
-    if (body.status === "paid") {
-      const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-      if (order) {
-        await db.update(clients)
-          .set({ currentMonthSpend: sql`current_month_spend + ${order.totalExVat}` })
-          .where(eq(clients.id, order.clientId));
-      }
+    if (toStatus === "paid") {
+      await db.update(clients)
+        .set({ currentMonthSpend: sql`current_month_spend + ${order.totalExVat}` })
+        .where(eq(clients.id, order.clientId));
     }
 
     // Send notification email for key status transitions
     const emailMap: Record<string, "quote_ready" | "confirmed" | "shipped" | "delivered"> = {
-      quoted: "quote_ready",
       confirmed: "confirmed",
       shipped: "shipped",
       delivered: "delivered",
     };
-    const emailType = emailMap[body.status];
+    const emailType = emailMap[toStatus];
     if (emailType) {
       try {
         await sendOrderEmail(orderId, emailType);

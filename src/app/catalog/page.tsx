@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { cards, games, sets as setsTable } from "@/lib/db/schema";
-import { like, or, eq, asc, desc, count, max, sql, SQL } from "drizzle-orm";
+import { ilike, or, eq, asc, desc, count, max, gte, lte, sql, SQL, getTableColumns } from "drizzle-orm";
 import { getVolumeDiscountInfo } from "@/lib/get-volume-discount";
 import Nav from "@/components/Nav";
 import Link from "next/link";
@@ -10,8 +10,13 @@ import CategoryToggle from "@/components/catalog/CategoryToggle";
 import SearchBar from "@/components/catalog/SearchBar";
 import CardTable from "@/components/catalog/CardTable";
 import Pagination from "@/components/catalog/Pagination";
+import { CatalogFilterProvider } from "@/components/catalog/CatalogFilterContext";
 
 const PER_PAGE = 50;
+
+function escapeLike(s: string): string {
+  return s.replace(/[%_\\]/g, "\\$&");
+}
 
 export default async function CatalogPage({
   searchParams,
@@ -24,6 +29,8 @@ export default async function CatalogPage({
     sort?: string;
     order?: string;
     page?: string;
+    priceMin?: string;
+    priceMax?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -34,26 +41,25 @@ export default async function CatalogPage({
   const sortField = params.sort || "cardNumber";
   const sortOrder = params.order === "desc" ? "desc" : "asc";
   const page = Math.max(1, parseInt(params.page || "1", 10) || 1);
+  const priceMin = params.priceMin?.trim() || "";
+  const priceMax = params.priceMax?.trim() || "";
 
-  // Get volume discount info for current user (cached per request)
-  const discountInfo = await getVolumeDiscountInfo();
+  // Phase 1: parallel — discount info + game list (no dependencies)
+  const [discountInfo, allGames] = await Promise.all([
+    getVolumeDiscountInfo(),
+    db.select().from(games).orderBy(asc(games.sortOrder)),
+  ]);
   const volumeDiscountPct = discountInfo.volumeDiscountPct;
-
-  // Fetch all games for tabs
-  const allGames = await db
-    .select()
-    .from(games)
-    .orderBy(asc(games.sortOrder));
 
   // Build where conditions
   const conditions: SQL[] = [];
   if (query) {
-    const pattern = `%${query}%`;
+    const pattern = `%${escapeLike(query)}%`;
     conditions.push(
       or(
-        like(cards.name, pattern),
-        like(cards.cardNumber, pattern),
-        like(cards.sku, pattern)
+        ilike(cards.name, pattern),
+        ilike(cards.cardNumber, pattern),
+        ilike(cards.sku, pattern)
       )!
     );
   }
@@ -72,6 +78,29 @@ export default async function CatalogPage({
   // Category filter
   conditions.push(eq(cards.category, categoryFilter as "singles" | "sealed"));
 
+  // Price filter (apply against discounted price when user has a volume discount)
+  const discountMultiplier = 1 - volumeDiscountPct;
+  if (priceMin) {
+    const min = parseFloat(priceMin);
+    if (!isNaN(min)) {
+      conditions.push(
+        volumeDiscountPct > 0
+          ? sql`${cards.priceExVat} * ${discountMultiplier} >= ${min}`
+          : gte(cards.priceExVat, min)
+      );
+    }
+  }
+  if (priceMax) {
+    const max_ = parseFloat(priceMax);
+    if (!isNaN(max_)) {
+      conditions.push(
+        volumeDiscountPct > 0
+          ? sql`${cards.priceExVat} * ${discountMultiplier} <= ${max_}`
+          : lte(cards.priceExVat, max_)
+      );
+    }
+  }
+
   const whereClause = conditions.length > 0
     ? conditions.reduce((a, b) => {
         return sql`${a} AND ${b}`;
@@ -88,121 +117,111 @@ export default async function CatalogPage({
       ? [desc(cards.setCode), desc(cards.cardNumber)]
       : [asc(cards.setCode), asc(cards.cardNumber)];
   } else if (sortField === "newest") {
-    // Sort by set release order (using setId as proxy for chronological), newest first
-    orderByClause = [desc(cards.setId), asc(cards.cardNumber)];
+    // Sort by set release order using sets.sortOrder (via LEFT JOIN), newest first
+    orderByClause = [desc(setsTable.sortOrder), asc(cards.cardNumber)];
   } else {
     orderByClause = sortOrder === "desc" ? desc(cards.cardNumber) : asc(cards.cardNumber);
   }
 
-  // Count total matching rows
-  const [{ total }] = await db
-    .select({ total: count() })
-    .from(cards)
-    .where(whereClause);
-
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
-  const safePage = Math.min(page, totalPages);
-
-  // Fetch paginated cards
-  const allCards = await db
-    .select()
-    .from(cards)
-    .where(whereClause)
-    .orderBy(...(Array.isArray(orderByClause) ? orderByClause : [orderByClause]))
-    .limit(PER_PAGE)
-    .offset((safePage - 1) * PER_PAGE);
-
-  // Sets for dropdown (code + name from sets table, filtered by game)
+  // Build set dropdown conditions
   const setConditions: SQL[] = [];
   if (gameFilter) {
     const game = allGames.find(g => g.code === gameFilter);
     if (game) setConditions.push(eq(setsTable.gameId, game.id));
   }
-  const setRows = await db
-    .select({ code: setsTable.code, name: setsTable.name })
-    .from(setsTable)
-    .where(setConditions.length ? setConditions[0] : undefined)
-    .orderBy(desc(setsTable.sortOrder));
-  const sets = setRows.map((r) => ({ code: r.code, name: r.name }));
 
-  // Last synced timestamp
-  const [{ lastSynced }] = await db
-    .select({ lastSynced: max(cards.lastSyncedAt) })
-    .from(cards);
+  // Phase 2: parallel — count, cards, sets, lastSynced (all depend on Phase 1)
+  const [countResult, allCards, setRows, lastSyncedResult] = await Promise.all([
+    db.select({ total: count() }).from(cards).where(whereClause),
+    db.select(getTableColumns(cards))
+      .from(cards)
+      .leftJoin(setsTable, eq(cards.setId, setsTable.id))
+      .where(whereClause)
+      .orderBy(...(Array.isArray(orderByClause) ? orderByClause : [orderByClause]))
+      .limit(PER_PAGE)
+      .offset((page - 1) * PER_PAGE),
+    db.select({ code: setsTable.code, name: setsTable.name })
+      .from(setsTable)
+      .where(setConditions.length ? setConditions[0] : undefined)
+      .orderBy(asc(setsTable.code)),
+    db.select({ lastSynced: max(cards.lastSyncedAt) }).from(cards),
+  ]);
+
+  const total = countResult[0].total;
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const sets = setRows.map((r) => ({ code: r.code, name: r.name }));
+  const lastSynced = lastSyncedResult[0].lastSynced;
 
   return (
     <>
       <Nav />
       <main className="mx-auto max-w-7xl px-6 py-8">
-        {/* Header */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold">Card Catalog</h1>
-            {lastSynced && (
-              <p className="mt-1 text-xs text-gray-500">
-                Last synced: {lastSynced instanceof Date ? lastSynced.toLocaleString("en-GB") : lastSynced}
-              </p>
-            )}
+        <CatalogFilterProvider>
+          {/* Header */}
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold">Card Catalog</h1>
+            </div>
           </div>
-        </div>
 
-        {/* Game tabs */}
-        <Suspense>
-          <GameTabs
-            games={allGames.map(g => ({ code: g.code, name: g.name, active: g.active ?? true }))}
-            currentGame={gameFilter}
-          />
-        </Suspense>
-
-        {/* Category toggle + search/set filters */}
-        <div className="mt-4 mb-4 flex flex-wrap items-center justify-between gap-4">
+          {/* Game tabs */}
           <Suspense>
-            <CategoryToggle currentCategory={categoryFilter} />
+            <GameTabs
+              games={allGames.map(g => ({ code: g.code, name: g.name, active: g.active ?? true }))}
+              currentGame={gameFilter}
+            />
           </Suspense>
+
+          {/* Category toggle + search/set filters */}
+          <div className="mt-4 mb-4 flex flex-wrap items-center justify-between gap-4">
+            <Suspense>
+              <CategoryToggle currentCategory={categoryFilter} />
+            </Suspense>
+            <Suspense>
+              <SearchBar sets={sets} currentQuery={query} currentSet={setFilter} currentSort={sortField} currentOrder={sortOrder} currentPriceMin={priceMin} currentPriceMax={priceMax} />
+            </Suspense>
+          </div>
+
+          {/* Discount banner */}
+          {volumeDiscountPct > 0 ? (
+            <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-sm">
+              <span className="text-gray-400">
+                Your discount:{" "}
+                <span className="font-semibold text-green-400">{(volumeDiscountPct * 100).toFixed(0)}%</span>
+                {" "}off all prices
+              </span>
+              <Link href="/discount" className="ml-3 text-brand-400 hover:text-brand-300 transition">
+                View tiers &rarr;
+              </Link>
+            </div>
+          ) : (
+            <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-sm">
+              <span className="text-gray-400">Volume discounts available &mdash; </span>
+              <Link href="/discount" className="text-brand-400 hover:text-brand-300 transition">
+                See how to save &rarr;
+              </Link>
+            </div>
+          )}
+
           <Suspense>
-            <SearchBar sets={sets} currentQuery={query} currentSet={setFilter} currentSort={sortField} currentOrder={sortOrder} />
+            <CardTable
+              cards={allCards}
+              currentSort={sortField}
+              currentOrder={sortOrder}
+              volumeDiscountPct={volumeDiscountPct}
+              lastSynced={lastSynced instanceof Date ? lastSynced.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : null}
+            />
           </Suspense>
-        </div>
 
-        {/* Discount banner */}
-        {volumeDiscountPct > 0 ? (
-          <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-sm">
-            <span className="text-gray-400">
-              Your discount:{" "}
-              <span className="font-semibold text-green-400">{(volumeDiscountPct * 100).toFixed(0)}%</span>
-              {" "}off all prices
-            </span>
-            <Link href="/discount" className="ml-3 text-brand-400 hover:text-brand-300 transition">
-              View tiers &rarr;
-            </Link>
-          </div>
-        ) : (
-          <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-sm">
-            <span className="text-gray-400">
-              Volume discounts available &mdash;{" "}
-            </span>
-            <Link href="/discount" className="text-brand-400 hover:text-brand-300 transition">
-              See how to save &rarr;
-            </Link>
-          </div>
-        )}
+          <Suspense>
+            <Pagination currentPage={safePage} totalPages={totalPages} />
+          </Suspense>
 
-        <Suspense>
-          <CardTable
-            cards={allCards}
-            currentSort={sortField}
-            currentOrder={sortOrder}
-            volumeDiscountPct={volumeDiscountPct}
-          />
-        </Suspense>
-
-        <Suspense>
-          <Pagination currentPage={safePage} totalPages={totalPages} />
-        </Suspense>
-
-        <p className="mt-4 text-xs text-gray-500">
-          {total} card{total !== 1 ? "s" : ""} total &middot; Prices ex-VAT
-        </p>
+          <p className="mt-4 text-xs text-gray-500">
+            {total} card{total !== 1 ? "s" : ""} total &middot; Prices ex-VAT
+          </p>
+        </CatalogFilterProvider>
       </main>
     </>
   );

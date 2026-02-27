@@ -24,7 +24,7 @@ export default async function StockCheckPage({ params }: { params: Promise<{ id:
       id: orderItems.id,
       cardId: orderItems.cardId,
       cardNumber: cards.cardNumber,
-      cardName: cards.name,
+      imageUrl: cards.imageUrl,
       cardrushUrl: cards.cardrushUrl,
       cardrushJpy: cards.cardrushJpy,
       gbpJpyRate: cards.gbpJpyRate,
@@ -33,6 +33,7 @@ export default async function StockCheckPage({ params }: { params: Promise<{ id:
       lineTotal: orderItems.lineTotal,
       stockStatus: orderItems.stockStatus,
       checkedPriceJpy: orderItems.checkedPriceJpy,
+      checkedQuantity: orderItems.checkedQuantity,
     })
     .from(orderItems)
     .innerJoin(cards, eq(orderItems.cardId, cards.id))

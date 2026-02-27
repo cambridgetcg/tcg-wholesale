@@ -2,6 +2,7 @@
 
 import { Fragment, useState, useEffect, useCallback } from "react";
 import StatusBadge from "@/components/StatusBadge";
+import CardThumbnail from "@/components/CardThumbnail";
 
 interface Order {
   id: number;
@@ -21,7 +22,7 @@ interface OrderItemRow {
   id: number;
   cardId: number;
   cardNumber: string;
-  cardName: string | null;
+  imageUrl: string | null;
   cardrushJpy: number | null;
   cardrushUrl: string | null;
   quantity: number;
@@ -46,7 +47,7 @@ interface NotificationRow {
   sentAt: string | null;
 }
 
-const statusFilters = ["all", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"];
+const statusFilters = ["all", "submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"] as const;
 
 const nextAction: Record<string, { label: string; next: string } | null> = {
   submitted: null, // Handled by the quote editor now
@@ -279,8 +280,8 @@ export default function AdminOrdersPage() {
                                 <th className="py-1 text-left w-8">
                                   <span title="Available">✓</span>
                                 </th>
+                                <th className="py-1 text-left w-10"></th>
                                 <th className="py-1 text-left">Card #</th>
-                                <th className="py-1 text-left">Name</th>
                                 <th className="py-1 text-right">CardRush ¥</th>
                                 <th className="py-1 text-right">Unit Price (£)</th>
                                 <th className="py-1 text-right">Qty</th>
@@ -304,8 +305,14 @@ export default function AdminOrdersPage() {
                                         className="accent-brand-500"
                                       />
                                     </td>
+                                    <td className="py-1">
+                                      {item.imageUrl ? (
+                                        <CardThumbnail src={item.imageUrl} alt={item.cardNumber} className="h-8 w-auto" />
+                                      ) : (
+                                        <div className="h-8 w-6 rounded bg-[#1e1e2e]" />
+                                      )}
+                                    </td>
                                     <td className="py-1 font-mono text-brand-500">{item.cardNumber}</td>
-                                    <td className="py-1 text-gray-400">{item.cardName}</td>
                                     <td className="py-1 text-right text-gray-500">
                                       {item.cardrushJpy != null ? `¥${item.cardrushJpy.toLocaleString()}` : "—"}
                                     </td>
@@ -377,8 +384,8 @@ export default function AdminOrdersPage() {
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-gray-500">
+                              <th className="py-1 text-left w-10"></th>
                               <th className="py-1 text-left">Card #</th>
-                              <th className="py-1 text-left">Name</th>
                               <th className="py-1 text-right">Unit Price</th>
                               <th className="py-1 text-right">Qty</th>
                               <th className="py-1 text-right">Line Total</th>
@@ -388,8 +395,14 @@ export default function AdminOrdersPage() {
                           <tbody>
                             {items[order.id].map((item) => (
                               <tr key={item.id} className="border-t border-[#1e1e2e]">
+                                <td className="py-1">
+                                  {item.imageUrl ? (
+                                    <img src={item.imageUrl} alt={item.cardNumber} className="h-8 w-auto rounded" loading="lazy" />
+                                  ) : (
+                                    <div className="h-8 w-6 rounded bg-[#1e1e2e]" />
+                                  )}
+                                </td>
                                 <td className="py-1 font-mono text-brand-500">{item.cardNumber}</td>
-                                <td className="py-1 text-gray-400">{item.cardName}</td>
                                 <td className="py-1 text-right">&pound;{item.unitPriceExVat.toFixed(2)}</td>
                                 <td className="py-1 text-right">{item.quantity}</td>
                                 <td className="py-1 text-right font-medium">&pound;{item.lineTotal.toFixed(2)}</td>

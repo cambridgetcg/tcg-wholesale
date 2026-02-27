@@ -1,5 +1,4 @@
 const colors: Record<string, string> = {
-  draft: "bg-gray-600",
   submitted: "bg-blue-600",
   quoted: "bg-yellow-600",
   confirmed: "bg-orange-600",

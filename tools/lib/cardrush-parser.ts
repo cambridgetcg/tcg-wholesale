@@ -23,7 +23,7 @@ export interface DiscoveredGroup {
 }
 
 // Regex patterns for extracting structured data from product names
-const CARD_NUMBER_RE = /\{((?:OP|ST|EB|PRB)\d{2}-\d{3})/;
+const CARD_NUMBER_RE = /\{((?:OP|ST|EB|PRB)\d{2}-\d{3}|P-\d{3})/;
 const PRICE_RE = /([\d,]+)円/;
 const RARITY_RE = /【([^】]+)】/;
 const STOCK_RE = /在庫数\s*(\d+)枚/;
@@ -61,9 +61,14 @@ function extractProduct(
   const priceJpy = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ""), 10) : 0;
   if (priceJpy === 0) return null;
 
-  // Card number from product name: {OP01-003}
+  // Card number from product name: {OP01-003}, {P-001}, {P}, {-}
   const cardNumberMatch = name.match(CARD_NUMBER_RE);
-  const cardNumber = cardNumberMatch ? cardNumberMatch[1] : null;
+  let cardNumber: string | null = cardNumberMatch ? cardNumberMatch[1] : null;
+  if (!cardNumber && name.includes("ドン!!")) {
+    cardNumber = "DON";
+  } else if (!cardNumber && /\{P\}/.test(name)) {
+    cardNumber = "P";
+  }
 
   // Rarity from product name: 【SR】
   const rarityMatch = name.match(RARITY_RE);

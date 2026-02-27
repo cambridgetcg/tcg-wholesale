@@ -1,25 +1,22 @@
 #!/usr/bin/env tsx
 // CardRush Scraper — scrapes product-group pages, maps to wholesale, upserts to DB
-// Usage: npx tsx tools/scrape-cardrush.ts OP01 [--dry-run] [--discover] [--set-all]
+// Usage: npx tsx tools/scrape-cardrush.ts OP01 [--dry-run] [--discover] [--set-all] [--prices-only]
 
 import { writeFileSync, mkdirSync } from "fs";
 import { join } from "path";
 import { getSetConfig, getAllSetCodes, SET_CONFIGS } from "./lib/config";
 import { fetchGbpJpyRate } from "./lib/fx-rate";
-import { fetchProductGroupPages, fetchDiscoveryPage } from "./lib/cardrush-client";
+import { fetchProductGroupPages, fetchProductListPages, fetchDiscoveryPage } from "./lib/cardrush-client";
 import {
   parseProductGroupPage,
   parseDiscoveryPage,
   type RawProduct,
 } from "./lib/cardrush-parser";
-import { mapToWholesale, type WholesaleCard } from "./lib/cardrush-mapper";
+import { mapToWholesale, mapSealedToWholesale, createSkuState, type WholesaleCard, type GlobalSkuState } from "./lib/cardrush-mapper";
 import { uploadImagesToS3, s3ImageUrl } from "./lib/s3-images";
 
 // DB imports — only used when not --dry-run
-import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { cards, games, sets, priceHistory } from "../src/lib/db/schema";
-import { eq } from "drizzle-orm";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -33,6 +30,8 @@ const dryRun = flags.has("--dry-run");
 const discover = flags.has("--discover");
 const setAll = flags.has("--set-all");
 const skipImages = flags.has("--skip-images");
+const pricesOnly = flags.has("--prices-only"); // Skip images, only update prices + price_history
+const sealed = flags.has("--sealed"); // Scrape sealed products from product-list page
 
 // ---------------------------------------------------------------------------
 // Discovery mode
@@ -70,7 +69,7 @@ async function runDiscover() {
 // Main scrape pipeline
 // ---------------------------------------------------------------------------
 
-async function scrapeSet(setCode: string) {
+async function scrapeSet(setCode: string, skuState?: GlobalSkuState) {
   const startTime = Date.now();
   const config = getSetConfig(setCode);
   if (!config) {
@@ -83,7 +82,8 @@ async function scrapeSet(setCode: string) {
 
   console.log(`\n=== Scraping ${config.code} (${config.name}) ===`);
   console.log(`  Product group: ${config.productGroupId}`);
-  console.log(`  Mode: ${dryRun ? "DRY RUN (no DB)" : "FULL (with DB upsert)"}\n`);
+  const mode = dryRun ? "DRY RUN (no DB)" : pricesOnly ? "PRICES ONLY (skip images)" : "FULL (with DB upsert)";
+  console.log(`  Mode: ${mode}\n`);
 
   // Step 1: Fetch exchange rate
   console.log("[1/7] Fetching GBP/JPY rate...");
@@ -91,7 +91,7 @@ async function scrapeSet(setCode: string) {
 
   // Step 2: Fetch all pages
   console.log("[2/7] Fetching product pages...");
-  const htmlPages = await fetchProductGroupPages(config.productGroupId);
+  const htmlPages = await fetchProductGroupPages(config.productGroupId, config.maxPages);
 
   // Step 3: Parse HTML → raw products
   console.log("[3/7] Parsing HTML...");
@@ -113,7 +113,7 @@ async function scrapeSet(setCode: string) {
 
   // Step 5: Map to wholesale
   console.log("[5/7] Mapping to wholesale...");
-  const wholesale = mapToWholesale(rawProducts, setCode, gbpJpyRate);
+  const wholesale = mapToWholesale(rawProducts, setCode, gbpJpyRate, skuState);
 
   // Save wholesale JSON
   const wsDir = join("data", "cardrush", "wholesale");
@@ -126,8 +126,8 @@ async function scrapeSet(setCode: string) {
   printSummary(rawProducts, wholesale, setCode);
 
   // Step 6: Upload images to S3
-  if (skipImages) {
-    console.log("\n[6/7] Skipping image upload (--skip-images)");
+  if (skipImages || pricesOnly) {
+    console.log(`\n[6/7] Skipping image upload (${pricesOnly ? "--prices-only" : "--skip-images"})`);
   } else {
     console.log("\n[6/7] Uploading images to S3...");
     const imgResult = await uploadImagesToS3(wholesale);
@@ -210,129 +210,346 @@ async function upsertToDb(
     process.exit(1);
   }
 
-  const client = postgres(connectionString, { max: 1 });
-  const db = drizzle(client);
+  const sql = postgres(connectionString, { max: 1, ssl: "require" });
 
   try {
     // Get-or-create game
-    let [game] = await db
-      .select()
-      .from(games)
-      .where(eq(games.code, gameCode))
-      .limit(1);
+    let [game] = await sql`SELECT id FROM games WHERE code = ${gameCode}`;
     if (!game) {
-      await db.insert(games).values({
-        code: gameCode,
-        name: "One Piece",
-        slug: "one-piece",
-        active: true,
-        sortOrder: 0,
-      });
-      [game] = await db
-        .select()
-        .from(games)
-        .where(eq(games.code, gameCode))
-        .limit(1);
+      [game] = await sql`
+        INSERT INTO games (code, name, slug, active, sort_order)
+        VALUES (${gameCode}, 'One Piece', 'one-piece', true, 0)
+        RETURNING id`;
     }
 
-    // Get-or-create set
-    let [set] = await db
-      .select()
-      .from(sets)
-      .where(eq(sets.code, setCode))
-      .limit(1);
+    // Resolve set for this batch
+    let [set] = await sql`SELECT id, name FROM sets WHERE code = ${setCode} AND game_id = ${game.id}`;
     if (!set) {
-      const config = getSetConfig(setCode)!;
-      await db.insert(sets).values({
-        gameId: game!.id,
-        code: setCode,
-        name: config.name,
-        sortOrder: 0,
-      });
-      [set] = await db
-        .select()
-        .from(sets)
-        .where(eq(sets.code, setCode))
-        .limit(1);
+      const config = getSetConfig(setCode);
+      const setName = config?.name ?? setCode;
+      [set] = await sql`
+        INSERT INTO sets (game_id, code, name, sort_order)
+        VALUES (${game.id}, ${setCode}, ${setName}, 0)
+        RETURNING id, name`;
     }
 
     const now = new Date();
-    let upserted = 0;
+    const BATCH_SIZE = 100;
 
-    for (const card of wholesale) {
-      // Upsert card by SKU
-      await db
-        .insert(cards)
-        .values({
-          cardNumber: card.cardNumber,
-          sku: card.sku,
-          name: card.name,
-          setCode,
-          setName: set!.name,
-          cardrushUrl: card.cardrushUrl,
-          cardrushJpy: card.cardrushJpy,
-          gbpJpyRate,
-          baseGbp: card.pricing.baseGbp,
-          priceExVat: card.pricing.priceExVat,
-          lastSyncedAt: now,
-          gameId: game!.id,
-          setId: set!.id,
-          category: "singles" as const,
-          imageUrl: card.imageUrl,
-        })
-        .onConflictDoUpdate({
-          target: cards.sku,
-          set: {
-            name: card.name,
-            cardrushUrl: card.cardrushUrl,
-            cardrushJpy: card.cardrushJpy,
-            gbpJpyRate,
-            baseGbp: card.pricing.baseGbp,
-            priceExVat: card.pricing.priceExVat,
-            lastSyncedAt: now,
-            gameId: game!.id,
-            setId: set!.id,
-            imageUrl: card.imageUrl,
-          },
-        });
+    for (let i = 0; i < wholesale.length; i += BATCH_SIZE) {
+      const batch = wholesale.slice(i, i + BATCH_SIZE);
 
-      // Upsert price history
-      const [dbCard] = await db
-        .select({ id: cards.id })
-        .from(cards)
-        .where(eq(cards.sku, card.sku))
-        .limit(1);
+      const cardRows = batch.map((card) => ({
+        card_number: card.cardNumber,
+        sku: card.sku,
+        name: card.name,
+        set_code: setCode,
+        set_name: set.name,
+        cardrush_url: card.cardrushUrl,
+        cardrush_jpy: card.cardrushJpy,
+        gbp_jpy_rate: gbpJpyRate,
+        base_gbp: card.pricing.baseGbp,
+        price_ex_vat: card.pricing.priceExVat,
+        last_synced_at: now,
+        game_id: game.id,
+        set_id: set.id,
+        category: "singles",
+        rarity: card.rarity ?? null,
+        image_url: card.imageUrl ?? null,
+      }));
 
-      if (dbCard) {
-        await db
-          .insert(priceHistory)
-          .values({
-            cardId: dbCard.id,
-            date: today,
-            cardrushJpy: card.cardrushJpy,
-            gbpJpyRate,
-          })
-          .onConflictDoUpdate({
-            target: [priceHistory.cardId, priceHistory.date],
-            set: {
-              cardrushJpy: card.cardrushJpy,
-              gbpJpyRate,
-            },
-          });
+      // Batch upsert cards
+      await sql`
+        INSERT INTO cards ${sql(cardRows,
+          "card_number", "sku", "name", "set_code", "set_name",
+          "cardrush_url", "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price_ex_vat",
+          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url"
+        )}
+        ON CONFLICT (sku) DO UPDATE SET
+          name = EXCLUDED.name,
+          set_code = EXCLUDED.set_code,
+          set_name = EXCLUDED.set_name,
+          cardrush_url = EXCLUDED.cardrush_url,
+          cardrush_jpy = EXCLUDED.cardrush_jpy,
+          gbp_jpy_rate = EXCLUDED.gbp_jpy_rate,
+          base_gbp = EXCLUDED.base_gbp,
+          price_ex_vat = EXCLUDED.price_ex_vat,
+          last_synced_at = EXCLUDED.last_synced_at,
+          game_id = EXCLUDED.game_id,
+          set_id = EXCLUDED.set_id,
+          rarity = EXCLUDED.rarity,
+          image_url = EXCLUDED.image_url`;
+
+      // Batch select card IDs by SKU
+      const skus = batch.map((c) => c.sku);
+      const dbCards = await sql`SELECT id, sku FROM cards WHERE sku = ANY(${skus})`;
+      const skuToId = new Map(dbCards.map((r: any) => [r.sku, r.id]));
+
+      // Prepare price history rows
+      const phRows = batch
+        .filter((card) => skuToId.has(card.sku))
+        .map((card) => ({
+          card_id: skuToId.get(card.sku),
+          date: today,
+          cardrush_jpy: card.cardrushJpy,
+          gbp_jpy_rate: gbpJpyRate,
+        }));
+
+      if (phRows.length > 0) {
+        await sql`
+          INSERT INTO price_history ${sql(phRows, "card_id", "date", "cardrush_jpy", "gbp_jpy_rate")}
+          ON CONFLICT (card_id, date) DO UPDATE SET
+            cardrush_jpy = EXCLUDED.cardrush_jpy,
+            gbp_jpy_rate = EXCLUDED.gbp_jpy_rate`;
       }
 
-      upserted++;
+      // Price archive — full pricing snapshot per card per day
+      const archiveRows = batch
+        .filter((card) => skuToId.has(card.sku))
+        .map((card) => ({
+          card_id: skuToId.get(card.sku),
+          snapshot_date: today,
+          sku: card.sku,
+          set_code: setCode,
+          category: "singles",
+          cardrush_jpy: card.cardrushJpy,
+          gbp_jpy_rate: gbpJpyRate,
+          base_gbp: card.pricing.baseGbp,
+          price_ex_vat: card.pricing.priceExVat,
+        }));
+
+      if (archiveRows.length > 0) {
+        await sql`
+          INSERT INTO price_archive ${sql(archiveRows,
+            "card_id", "snapshot_date", "sku", "set_code", "category",
+            "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price_ex_vat"
+          )}
+          ON CONFLICT (card_id, snapshot_date) DO UPDATE SET
+            cardrush_jpy = EXCLUDED.cardrush_jpy,
+            gbp_jpy_rate = EXCLUDED.gbp_jpy_rate,
+            base_gbp = EXCLUDED.base_gbp,
+            price_ex_vat = EXCLUDED.price_ex_vat`;
+      }
     }
 
-    // Verification: count cards for this set
-    const allSetCards = await db
-      .select({ id: cards.id })
-      .from(cards)
-      .where(eq(cards.setCode, setCode));
-    console.log(`  Upserted ${upserted} cards`);
-    console.log(`  Total ${setCode} cards in DB: ${allSetCards.length}`);
+    // Verification
+    console.log(`  Upserted ${wholesale.length} cards (batch mode)`);
+    const [count] = await sql`SELECT COUNT(*) as cnt FROM cards WHERE set_code = ${setCode}`;
+    console.log(`  Total ${setCode} cards in DB: ${count.cnt}`);
   } finally {
-    await client.end();
+    await sql.end();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sealed product scraping
+// ---------------------------------------------------------------------------
+
+const SEALED_LIST_ID = 4; // product-list/4 = unopened boxes
+
+async function scrapeSealed() {
+  const startTime = Date.now();
+  console.log("\n=== Scraping Sealed Products ===");
+  console.log(`  Product list: ${SEALED_LIST_ID}`);
+  const mode = dryRun ? "DRY RUN (no DB)" : "FULL (with DB upsert)";
+  console.log(`  Mode: ${mode}\n`);
+
+  // Step 1: Fetch exchange rate
+  console.log("[1/6] Fetching GBP/JPY rate...");
+  const gbpJpyRate = await fetchGbpJpyRate();
+
+  // Step 2: Fetch all pages
+  console.log("[2/6] Fetching product-list pages...");
+  const htmlPages = await fetchProductListPages(SEALED_LIST_ID);
+
+  // Step 3: Parse HTML → raw products
+  console.log("[3/6] Parsing HTML...");
+  const rawProducts: RawProduct[] = [];
+  for (const html of htmlPages) {
+    const parsed = parseProductGroupPage(html); // same HTML structure
+    rawProducts.push(...parsed);
+  }
+  console.log(`  Parsed ${rawProducts.length} raw product listings`);
+
+  // Step 4: Save raw JSON
+  console.log("[4/6] Saving raw data...");
+  const today = new Date().toISOString().slice(0, 10);
+  const rawDir = join("data", "cardrush", "raw");
+  mkdirSync(rawDir, { recursive: true });
+  const rawPath = join(rawDir, `SEALED-${today}.json`);
+  writeFileSync(rawPath, JSON.stringify(rawProducts, null, 2));
+  console.log(`  Saved ${rawProducts.length} products → ${rawPath}`);
+
+  // Step 5: Map to wholesale
+  console.log("[5/6] Mapping to wholesale...");
+  const wholesale = mapSealedToWholesale(rawProducts, gbpJpyRate);
+
+  // Save wholesale JSON
+  const wsDir = join("data", "cardrush", "wholesale");
+  mkdirSync(wsDir, { recursive: true });
+  const wsPath = join(wsDir, `SEALED-${today}.json`);
+  writeFileSync(wsPath, JSON.stringify(wholesale, null, 2));
+  console.log(`  Mapped ${wholesale.length} sealed products → ${wsPath}`);
+
+  // Summary
+  if (wholesale.length > 0) {
+    const prices = wholesale.map((w) => w.cardrushJpy);
+    const minJpy = Math.min(...prices);
+    const maxJpy = Math.max(...prices);
+    const gbpPrices = wholesale.map((w) => w.pricing.priceExVat);
+    const minGbp = Math.min(...gbpPrices).toFixed(2);
+    const maxGbp = Math.max(...gbpPrices).toFixed(2);
+
+    console.log(`\n--- Summary ---`);
+    console.log(`  Total raw listings:   ${rawProducts.length}`);
+    console.log(`  Sealed products:      ${wholesale.length}`);
+    console.log(`  Price range (JPY):    ¥${minJpy.toLocaleString()} – ¥${maxJpy.toLocaleString()}`);
+    console.log(`  Price range (GBP):    £${minGbp} – £${maxGbp}`);
+  }
+
+  // Step 6: DB upsert
+  if (dryRun) {
+    console.log("\n[6/6] Skipping DB upsert (--dry-run)");
+  } else {
+    console.log("\n[6/6] Upserting to database...");
+    await upsertSealedToDb(wholesale, gbpJpyRate, today);
+  }
+
+  const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`\nDone in ${elapsed}s`);
+}
+
+async function upsertSealedToDb(
+  wholesale: WholesaleCard[],
+  gbpJpyRate: number,
+  today: string
+) {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    console.error("DATABASE_URL is required for DB upsert. Use --dry-run to skip.");
+    process.exit(1);
+  }
+
+  const sql = postgres(connectionString, { max: 1, ssl: "require" });
+
+  try {
+    // Get-or-create game (One Piece)
+    let [game] = await sql`SELECT id FROM games WHERE code = ${"onepiece"}`;
+    if (!game) {
+      [game] = await sql`
+        INSERT INTO games (code, name, slug, active, sort_order)
+        VALUES ('onepiece', 'One Piece', 'one-piece', true, 0)
+        RETURNING id`;
+    }
+
+    // Get-or-create "SEALED" set
+    let [set] = await sql`SELECT id, name FROM sets WHERE code = ${"SEALED"} AND game_id = ${game.id}`;
+    if (!set) {
+      [set] = await sql`
+        INSERT INTO sets (game_id, code, name, sort_order)
+        VALUES (${game.id}, 'SEALED', 'Sealed Products', 999)
+        RETURNING id, name`;
+    }
+
+    const now = new Date();
+    const BATCH_SIZE = 100;
+
+    for (let i = 0; i < wholesale.length; i += BATCH_SIZE) {
+      const batch = wholesale.slice(i, i + BATCH_SIZE);
+
+      const cardRows = batch.map((card) => ({
+        card_number: card.cardNumber,
+        sku: card.sku,
+        name: card.name,
+        set_code: "SEALED",
+        set_name: "Sealed Products",
+        cardrush_url: card.cardrushUrl,
+        cardrush_jpy: card.cardrushJpy,
+        gbp_jpy_rate: gbpJpyRate,
+        base_gbp: card.pricing.baseGbp,
+        price_ex_vat: card.pricing.priceExVat,
+        last_synced_at: now,
+        game_id: game.id,
+        set_id: set.id,
+        category: "sealed",
+        rarity: null,
+        image_url: card.imageUrl ?? null,
+      }));
+
+      await sql`
+        INSERT INTO cards ${sql(cardRows,
+          "card_number", "sku", "name", "set_code", "set_name",
+          "cardrush_url", "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price_ex_vat",
+          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url"
+        )}
+        ON CONFLICT (sku) DO UPDATE SET
+          name = EXCLUDED.name,
+          cardrush_url = EXCLUDED.cardrush_url,
+          cardrush_jpy = EXCLUDED.cardrush_jpy,
+          gbp_jpy_rate = EXCLUDED.gbp_jpy_rate,
+          base_gbp = EXCLUDED.base_gbp,
+          price_ex_vat = EXCLUDED.price_ex_vat,
+          last_synced_at = EXCLUDED.last_synced_at,
+          game_id = EXCLUDED.game_id,
+          set_id = EXCLUDED.set_id,
+          image_url = EXCLUDED.image_url`;
+
+      // Price history
+      const skus = batch.map((c) => c.sku);
+      const dbCards = await sql`SELECT id, sku FROM cards WHERE sku = ANY(${skus})`;
+      const skuToId = new Map(dbCards.map((r: any) => [r.sku, r.id]));
+
+      const phRows = batch
+        .filter((card) => skuToId.has(card.sku))
+        .map((card) => ({
+          card_id: skuToId.get(card.sku),
+          date: today,
+          cardrush_jpy: card.cardrushJpy,
+          gbp_jpy_rate: gbpJpyRate,
+        }));
+
+      if (phRows.length > 0) {
+        await sql`
+          INSERT INTO price_history ${sql(phRows, "card_id", "date", "cardrush_jpy", "gbp_jpy_rate")}
+          ON CONFLICT (card_id, date) DO UPDATE SET
+            cardrush_jpy = EXCLUDED.cardrush_jpy,
+            gbp_jpy_rate = EXCLUDED.gbp_jpy_rate`;
+      }
+
+      // Price archive
+      const archiveRows = batch
+        .filter((card) => skuToId.has(card.sku))
+        .map((card) => ({
+          card_id: skuToId.get(card.sku),
+          snapshot_date: today,
+          sku: card.sku,
+          set_code: "SEALED",
+          category: "sealed",
+          cardrush_jpy: card.cardrushJpy,
+          gbp_jpy_rate: gbpJpyRate,
+          base_gbp: card.pricing.baseGbp,
+          price_ex_vat: card.pricing.priceExVat,
+        }));
+
+      if (archiveRows.length > 0) {
+        await sql`
+          INSERT INTO price_archive ${sql(archiveRows,
+            "card_id", "snapshot_date", "sku", "set_code", "category",
+            "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price_ex_vat"
+          )}
+          ON CONFLICT (card_id, snapshot_date) DO UPDATE SET
+            cardrush_jpy = EXCLUDED.cardrush_jpy,
+            gbp_jpy_rate = EXCLUDED.gbp_jpy_rate,
+            base_gbp = EXCLUDED.base_gbp,
+            price_ex_vat = EXCLUDED.price_ex_vat`;
+      }
+    }
+
+    const [count] = await sql`SELECT COUNT(*) as cnt FROM cards WHERE category = 'sealed'`;
+    console.log(`  Upserted ${wholesale.length} sealed products (batch mode)`);
+    console.log(`  Total sealed products in DB: ${count.cnt}`);
+  } finally {
+    await sql.end();
   }
 }
 
@@ -346,22 +563,51 @@ async function main() {
     return;
   }
 
+  if (sealed) {
+    await scrapeSealed();
+    return;
+  }
+
   if (setAll) {
-    const codes = getAllSetCodes();
-    console.log(`\n=== Scraping all ${codes.length} sets ===\n`);
+    const codes = getAllSetCodes(); // sorted by product-group ID ascending
+    console.log(`\n=== Scraping all ${codes.length} sets (by product-group order) ===\n`);
+    const scrapeStartDate = new Date().toISOString().slice(0, 10); // capture before scraping
     const totalStart = Date.now();
+    const globalSkuState = createSkuState();
     for (let i = 0; i < codes.length; i++) {
       console.log(`\n[${ i + 1}/${codes.length}]`);
-      await scrapeSet(codes[i]);
+      await scrapeSet(codes[i], globalSkuState);
     }
     const totalElapsed = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log(`\n=== All ${codes.length} sets complete in ${totalElapsed} min ===`);
+
+    // Clean up stale cards that weren't updated in this run (skip those referenced by orders)
+    if (!dryRun) {
+      const connectionString = process.env.DATABASE_URL;
+      if (connectionString) {
+        const sql = postgres(connectionString, { max: 1, ssl: "require" });
+        const staleIds = await sql`
+          SELECT id FROM cards
+          WHERE category = 'singles'
+            AND (last_synced_at IS NULL OR last_synced_at::date < ${scrapeStartDate}::date)
+            AND id NOT IN (SELECT DISTINCT card_id FROM order_items)`;
+        if (staleIds.length > 0) {
+          const ids = staleIds.map((r: any) => r.id);
+          await sql`DELETE FROM price_history WHERE card_id = ANY(${ids})`;
+          await sql`DELETE FROM price_archive WHERE card_id = ANY(${ids})`;
+          await sql`DELETE FROM cards WHERE id = ANY(${ids})`;
+          console.log(`\nCleaned up ${ids.length} stale cards not updated today`);
+        }
+        await sql.end();
+      }
+    }
     return;
   }
 
   const setCode = positional[0]?.toUpperCase();
   if (!setCode) {
-    console.error("Usage: npx tsx tools/scrape-cardrush.ts <SET_CODE> [--dry-run] [--skip-images]");
+    console.error("Usage: npx tsx tools/scrape-cardrush.ts <SET_CODE> [--dry-run] [--skip-images] [--prices-only]");
+    console.error("       npx tsx tools/scrape-cardrush.ts --sealed [--dry-run]");
     console.error("       npx tsx tools/scrape-cardrush.ts --discover");
     console.error(`\nKnown sets: ${getAllSetCodes().join(", ")}`);
     process.exit(1);
