@@ -196,40 +196,40 @@ export default function AdminOrdersPage() {
 
       {/* Orders table */}
       <div className="overflow-x-auto rounded-lg border border-[#1e1e2e]">
-        <table className="w-full text-sm min-w-[700px]">
+        <table className="w-full text-sm">
           <thead className="bg-[#12121a]">
             <tr className="text-left text-gray-400">
-              <th className="px-4 py-3 font-medium w-8"></th>
-              <th className="px-4 py-3 font-medium">Order #</th>
-              <th className="px-4 py-3 font-medium">Client</th>
-              <th className="px-4 py-3 font-medium">Date</th>
-              <th className="px-4 py-3 font-medium text-right">Total</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium">Actions</th>
+              <th className="px-2 md:px-4 py-3 font-medium w-8"></th>
+              <th className="px-2 md:px-4 py-3 font-medium">Order #</th>
+              <th className="hidden md:table-cell px-4 py-3 font-medium">Client</th>
+              <th className="hidden md:table-cell px-4 py-3 font-medium">Date</th>
+              <th className="px-2 md:px-4 py-3 font-medium text-right">Total</th>
+              <th className="px-2 md:px-4 py-3 font-medium">Status</th>
+              <th className="px-2 md:px-4 py-3 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1e1e2e]">
             {filtered.map((order) => (
               <Fragment key={order.id}>
                 <tr className="hover:bg-[#12121a] cursor-pointer" onClick={() => toggleExpand(order.id)}>
-                  <td className="px-4 py-3 text-gray-500">{expandedId === order.id ? "\u25BC" : "\u25B6"}</td>
-                  <td className="px-4 py-3 font-medium">#{order.id}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-2 md:px-4 py-3 text-gray-500">{expandedId === order.id ? "\u25BC" : "\u25B6"}</td>
+                  <td className="px-2 md:px-4 py-3 font-medium">#{order.id}</td>
+                  <td className="hidden md:table-cell px-4 py-3">
                     <span>{order.clientName ?? `Client #${order.clientId}`}</span>
                     {order.clientCompany && <span className="ml-1 text-gray-500 text-xs">({order.clientCompany})</span>}
                   </td>
-                  <td className="px-4 py-3 text-gray-400">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "\u2014"}</td>
-                  <td className="px-4 py-3 text-right font-medium">&pound;{order.totalExVat.toFixed(2)}</td>
-                  <td className="px-4 py-3">
+                  <td className="hidden md:table-cell px-4 py-3 text-gray-400">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "\u2014"}</td>
+                  <td className="px-2 md:px-4 py-3 text-right font-medium">&pound;{order.totalExVat.toFixed(2)}</td>
+                  <td className="px-2 md:px-4 py-3">
                     <StatusBadge status={order.status} />
                     {order.stockCheckedAt && (
-                      <span className="ml-2 text-xs text-green-500">
+                      <span className="hidden sm:inline ml-2 text-xs text-green-500">
                         Stock verified: {new Date(order.stockCheckedAt).toLocaleDateString()}
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex gap-2">
+                  <td className="px-2 md:px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex flex-wrap gap-2">
                       {order.status === "submitted" && (
                         <a
                           href={`/admin/orders/${order.id}/stock-check`}
@@ -261,7 +261,7 @@ export default function AdminOrdersPage() {
                 {/* Expanded detail — submitted orders get editable quote view */}
                 {expandedId === order.id && (
                   <tr>
-                    <td colSpan={7} className="bg-[#0e0e16] px-8 py-4">
+                    <td colSpan={7} className="bg-[#0e0e16] px-4 md:px-8 py-4">
                       {!items[order.id] ? (
                         <span className="text-gray-500">Loading items...</span>
                       ) : order.status === "submitted" && editItems[order.id] ? (
@@ -430,9 +430,9 @@ export default function AdminOrdersPage() {
                           <h4 className="text-xs font-semibold text-gray-400 mb-2">Notification History</h4>
                           <div className="space-y-1">
                             {notifs[order.id].map((n) => (
-                              <div key={n.id} className="flex items-center gap-3 text-xs">
+                              <div key={n.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                                 <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${n.status === "sent" ? "bg-green-500" : "bg-red-500"}`} />
-                                <span className="text-gray-300 w-24">
+                                <span className="text-gray-300">
                                   {n.type.replace(/_/g, " ")}
                                 </span>
                                 <span className="text-gray-500 truncate">{n.recipient}</span>

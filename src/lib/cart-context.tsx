@@ -24,6 +24,7 @@ interface CartContextValue {
   removeItem: (cardId: number) => void;
   updateQuantity: (cardId: number, qty: number) => void;
   clear: () => void;
+  flushSync: () => Promise<void>;
   totalExVat: number;
   discountedTotal: number;
   itemCount: number;
@@ -173,6 +174,21 @@ export function CartProvider({
     fetch("/api/cart", { method: "DELETE" }).catch(() => {});
   }, []);
 
+  // Flush any pending debounced sync immediately (e.g. before sign out)
+  const flushSync = useCallback(async () => {
+    if (syncTimerRef.current) {
+      clearTimeout(syncTimerRef.current);
+      syncTimerRef.current = null;
+    }
+    if (items.length > 0) {
+      await fetch("/api/cart", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+      }).catch(() => {});
+    }
+  }, [items]);
+
   const totalExVat = useMemo(
     () => items.reduce((sum, i) => sum + i.card.priceExVat * i.quantity, 0),
     [items]
@@ -196,6 +212,7 @@ export function CartProvider({
         removeItem,
         updateQuantity,
         clear,
+        flushSync,
         totalExVat,
         discountedTotal,
         itemCount,

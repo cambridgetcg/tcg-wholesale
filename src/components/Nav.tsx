@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSession, signOut } from "next-auth/react";
 import { useCart } from "@/lib/cart-context";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 function useIsAdminHost() {
   const [isAdmin, setIsAdmin] = useState(false);
@@ -16,9 +16,14 @@ function useIsAdminHost() {
 export default function Nav() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
-  const { itemCount, discountedTotal } = useCart();
+  const { itemCount, discountedTotal, flushSync } = useCart();
   const isAdminHost = useIsAdminHost();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleSignOut = useCallback(async () => {
+    await flushSync();
+    signOut({ callbackUrl: "/login" });
+  }, [flushSync]);
 
   const adminUrl = process.env.NEXT_PUBLIC_ADMIN_URL ?? "/admin";
   const storefrontUrl = process.env.NEXT_PUBLIC_STOREFRONT_URL ?? "/catalog";
@@ -96,10 +101,7 @@ export default function Nav() {
           )}
           <span className="text-gray-500">{session?.user?.email}</span>
           <button
-            onClick={() => {
-              localStorage.removeItem("tcg-cart");
-              signOut({ callbackUrl: "/login" });
-            }}
+            onClick={handleSignOut}
             className="rounded bg-gray-800 px-3 py-1 text-xs hover:bg-gray-700 transition"
           >
             Sign Out
@@ -139,10 +141,7 @@ export default function Nav() {
           )}
           <span className="text-gray-500">{session?.user?.email}</span>
           <button
-            onClick={() => {
-              localStorage.removeItem("tcg-cart");
-              signOut({ callbackUrl: "/login" });
-            }}
+            onClick={handleSignOut}
             className="rounded bg-gray-800 px-3 py-1 text-xs hover:bg-gray-700 transition w-fit"
           >
             Sign Out

@@ -82,18 +82,18 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             This order has been cancelled.
           </div>
         ) : (
-          <div className="mb-8 flex items-center gap-1 overflow-x-auto">
+          <div className="mb-8 flex items-center gap-1 overflow-x-auto pb-2">
             {statusSteps.map((step, i) => (
-              <div key={step} className="flex items-center">
+              <div key={step} className="flex items-center flex-shrink-0">
                 <div
-                  className={`rounded-full px-3 py-1 text-xs font-medium ${
+                  className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium ${
                     i <= currentIdx ? "bg-brand-600 text-white" : "bg-gray-800 text-gray-500"
                   }`}
                 >
                   {step.charAt(0).toUpperCase() + step.slice(1)}
                 </div>
                 {i < statusSteps.length - 1 && (
-                  <div className={`h-0.5 w-6 ${i < currentIdx ? "bg-brand-600" : "bg-gray-800"}`} />
+                  <div className={`h-0.5 w-6 flex-shrink-0 ${i < currentIdx ? "bg-brand-600" : "bg-gray-800"}`} />
                 )}
               </div>
             ))}
@@ -106,12 +106,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             <table className="w-full text-sm">
               <thead className="bg-[#12121a]">
                 <tr className="text-left text-gray-400">
-                  <th className="w-12 px-4 py-3 font-medium"></th>
-                  <th className="px-4 py-3 font-medium">Card #</th>
+                  <th className="w-12 px-2 md:px-4 py-3 font-medium"></th>
+                  <th className="px-2 md:px-4 py-3 font-medium">Card #</th>
                   <th className="hidden md:table-cell px-4 py-3 font-medium">SKU</th>
-                  <th className="px-4 py-3 font-medium text-right">Unit Price</th>
-                  <th className="px-4 py-3 font-medium text-right">Qty</th>
-                  <th className="px-4 py-3 font-medium text-right">Line Total</th>
+                  <th className="px-2 md:px-4 py-3 font-medium text-right">Unit Price</th>
+                  <th className="px-2 md:px-4 py-3 font-medium text-right">Qty</th>
+                  <th className="px-2 md:px-4 py-3 font-medium text-right">Line Total</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e1e2e]">
@@ -120,18 +120,18 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                     && Math.abs(item.originalUnitPrice - item.unitPriceExVat) >= 0.01;
                   return (
                     <tr key={item.id}>
-                      <td className="px-4 py-1">
+                      <td className="px-2 md:px-4 py-1">
                         {item.imageUrl ? (
                           <CardThumbnail src={item.imageUrl} alt={item.cardNumber} />
                         ) : (
                           <div className="h-10 w-7 rounded bg-[#1e1e2e]" />
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-2 md:px-4 py-3">
                         <span className="font-mono text-brand-500">{item.cardNumber}</span>
                       </td>
                       <td className="hidden md:table-cell px-4 py-3 text-gray-400 font-mono text-xs">{item.sku}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-2 md:px-4 py-3 text-right">
                         {priceChanged ? (
                           <span>
                             <span className="text-gray-600 line-through mr-2">
@@ -147,8 +147,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right">{item.quantity}</td>
-                      <td className="px-4 py-3 text-right font-medium">
+                      <td className="px-2 md:px-4 py-3 text-right">{item.quantity}</td>
+                      <td className="px-2 md:px-4 py-3 text-right font-medium">
                         &pound;{item.lineTotal.toFixed(2)}
                       </td>
                     </tr>

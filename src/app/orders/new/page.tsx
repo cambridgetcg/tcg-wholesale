@@ -81,7 +81,7 @@ export default function NewOrderPage() {
         ) : (
           <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             {/* Editable cart table */}
-            <div className="lg:col-span-2 overflow-hidden rounded-lg border border-[#1e1e2e]">
+            <div className="lg:col-span-2 overflow-x-auto rounded-lg border border-[#1e1e2e]">
               <table className="w-full text-sm">
                 <thead className="bg-[#12121a]">
                   <tr className="text-left text-gray-400">

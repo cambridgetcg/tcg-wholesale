@@ -56,35 +56,35 @@ export default async function OrdersPage() {
           </Link>
         </div>
 
-        <div className="overflow-hidden rounded-lg border border-[#1e1e2e]">
+        <div className="overflow-x-auto rounded-lg border border-[#1e1e2e]">
           <table className="w-full text-sm">
             <thead className="bg-[#12121a]">
               <tr className="text-left text-gray-400">
-                <th className="px-4 py-3 font-medium">Order #</th>
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium text-right">Items</th>
-                <th className="px-4 py-3 font-medium text-right">Total (ex-VAT)</th>
-                <th className="px-4 py-3 font-medium">Status</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-2 md:px-4 py-3 font-medium">Order #</th>
+                <th className="hidden md:table-cell px-4 py-3 font-medium">Date</th>
+                <th className="hidden md:table-cell px-4 py-3 font-medium text-right">Items</th>
+                <th className="px-2 md:px-4 py-3 font-medium text-right">Total</th>
+                <th className="px-2 md:px-4 py-3 font-medium">Status</th>
+                <th className="hidden md:table-cell px-4 py-3"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e1e2e]">
               {allOrders.map((order) => (
                 <tr key={order.id} className="hover:bg-[#12121a] transition">
-                  <td className="px-4 py-3">
+                  <td className="px-2 md:px-4 py-3">
                     <Link href={`/orders/${order.id}`} className="text-brand-500 hover:underline">
                       #{order.id}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-400">
+                  <td className="hidden md:table-cell px-4 py-3 text-gray-400">
                     {order.createdAt?.toLocaleDateString() ?? "\u2014"}
                   </td>
-                  <td className="px-4 py-3 text-right text-gray-400">{order.itemCount}</td>
-                  <td className="px-4 py-3 text-right font-medium">
+                  <td className="hidden md:table-cell px-4 py-3 text-right text-gray-400">{order.itemCount}</td>
+                  <td className="px-2 md:px-4 py-3 text-right font-medium">
                     &pound;{order.totalExVat.toFixed(2)}
                   </td>
-                  <td className="px-4 py-3"><StatusBadge status={order.status} /></td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-2 md:px-4 py-3"><StatusBadge status={order.status} /></td>
+                  <td className="hidden md:table-cell px-4 py-3 text-right">
                     <Link
                       href={`/orders/${order.id}`}
                       className="text-brand-500 hover:underline text-xs"
