@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { orders, orderItems, cards } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Nav from "@/components/Nav";
@@ -30,12 +30,12 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       unitPriceExVat: orderItems.unitPriceExVat,
       originalUnitPrice: orderItems.originalUnitPrice,
       lineTotal: orderItems.lineTotal,
-      cardNumber: cards.cardNumber,
-      sku: cards.sku,
+      cardNumber: sql<string>`coalesce(${cards.cardNumber}, 'Unknown')`.as("card_number"),
+      sku: sql<string>`coalesce(${cards.sku}, '—')`.as("sku"),
       imageUrl: cards.imageUrl,
     })
     .from(orderItems)
-    .innerJoin(cards, eq(orderItems.cardId, cards.id))
+    .leftJoin(cards, eq(orderItems.cardId, cards.id))
     .where(eq(orderItems.orderId, orderId));
 
   const isCancelled = order.status === "cancelled";
@@ -102,13 +102,13 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Items table */}
-          <div className="lg:col-span-2 overflow-hidden rounded-lg border border-[#1e1e2e]">
+          <div className="lg:col-span-2 overflow-x-auto rounded-lg border border-[#1e1e2e]">
             <table className="w-full text-sm">
               <thead className="bg-[#12121a]">
                 <tr className="text-left text-gray-400">
                   <th className="w-12 px-4 py-3 font-medium"></th>
                   <th className="px-4 py-3 font-medium">Card #</th>
-                  <th className="px-4 py-3 font-medium">SKU</th>
+                  <th className="hidden md:table-cell px-4 py-3 font-medium">SKU</th>
                   <th className="px-4 py-3 font-medium text-right">Unit Price</th>
                   <th className="px-4 py-3 font-medium text-right">Qty</th>
                   <th className="px-4 py-3 font-medium text-right">Line Total</th>
@@ -130,7 +130,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                       <td className="px-4 py-3">
                         <span className="font-mono text-brand-500">{item.cardNumber}</span>
                       </td>
-                      <td className="px-4 py-3 text-gray-400 font-mono text-xs">{item.sku}</td>
+                      <td className="hidden md:table-cell px-4 py-3 text-gray-400 font-mono text-xs">{item.sku}</td>
                       <td className="px-4 py-3 text-right">
                         {priceChanged ? (
                           <span>

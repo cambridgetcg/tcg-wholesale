@@ -85,23 +85,23 @@ export default function NewOrderPage() {
               <table className="w-full text-sm">
                 <thead className="bg-[#12121a]">
                   <tr className="text-left text-gray-400">
-                    <th className="px-4 py-3 font-medium">Card #</th>
-                    <th className="px-4 py-3 font-medium text-right">Price ex-VAT</th>
-                    <th className="px-4 py-3 font-medium text-right">Qty</th>
-                    <th className="px-4 py-3 font-medium text-right">Line Total</th>
-                    <th className="px-4 py-3"></th>
+                    <th className="px-2 md:px-4 py-3 font-medium">Card #</th>
+                    <th className="px-2 md:px-4 py-3 font-medium text-right">Price ex-VAT</th>
+                    <th className="px-2 md:px-4 py-3 font-medium text-right">Qty</th>
+                    <th className="px-2 md:px-4 py-3 font-medium text-right">Line Total</th>
+                    <th className="px-2 md:px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1e1e2e]">
                   {items.map((item) => (
                     <tr key={item.card.id}>
-                      <td className="px-4 py-3">
+                      <td className="px-2 md:px-4 py-3">
                         <span className="font-mono text-brand-500">{item.card.cardNumber}</span>
                       </td>
-                      <td className="px-4 py-3 text-right text-gray-400">
+                      <td className="px-2 md:px-4 py-3 text-right text-gray-400">
                         &pound;{item.card.priceExVat.toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-2 md:px-4 py-3 text-right">
                         <input
                           type="number"
                           min={1}
@@ -113,10 +113,10 @@ export default function NewOrderPage() {
                           className="w-16 rounded bg-[#0a0a0f] border border-[#1e1e2e] px-2 py-1 text-right text-sm focus:border-brand-500 focus:outline-none"
                         />
                       </td>
-                      <td className="px-4 py-3 text-right font-medium">
+                      <td className="px-2 md:px-4 py-3 text-right font-medium">
                         &pound;{(item.card.priceExVat * item.quantity).toFixed(2)}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-2 md:px-4 py-3 text-right">
                         <button
                           onClick={() => removeItem(item.card.id)}
                           className="text-gray-500 hover:text-red-400 transition text-xs"

@@ -195,8 +195,8 @@ export default function AdminOrdersPage() {
       </div>
 
       {/* Orders table */}
-      <div className="overflow-hidden rounded-lg border border-[#1e1e2e]">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-lg border border-[#1e1e2e]">
+        <table className="w-full text-sm min-w-[700px]">
           <thead className="bg-[#12121a]">
             <tr className="text-left text-gray-400">
               <th className="px-4 py-3 font-medium w-8"></th>
@@ -274,6 +274,7 @@ export default function AdminOrdersPage() {
                             </span>
                           </div>
 
+                          <div className="overflow-x-auto">
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="text-gray-500">
@@ -355,6 +356,7 @@ export default function AdminOrdersPage() {
                               </tr>
                             </tfoot>
                           </table>
+                          </div>
 
                           {/* Admin notes */}
                           <div>
@@ -381,6 +383,7 @@ export default function AdminOrdersPage() {
                         </div>
                       ) : (
                         /* ── Read-only items view for non-submitted orders ── */
+                        <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-gray-500">
@@ -418,6 +421,7 @@ export default function AdminOrdersPage() {
                             ))}
                           </tbody>
                         </table>
+                        </div>
                       )}
 
                       {/* Notification history */}

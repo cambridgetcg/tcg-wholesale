@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
 import { getVolumeDiscount } from "@/lib/get-volume-discount";
@@ -6,6 +6,11 @@ import { getVolumeDiscount } from "@/lib/get-volume-discount";
 export const metadata: Metadata = {
   title: "TCG Wholesale",
   description: "Wholesale TCG card ordering platform",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

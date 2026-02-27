@@ -19,7 +19,7 @@ export default async function DiscountPage() {
         {/* Current status */}
         <div className="rounded-lg border border-[#1e1e2e] bg-[#12121a] p-6 mb-8">
           <h2 className="text-lg font-semibold mb-4">Your Current Discount</h2>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
               <p className="text-xs text-gray-500 mb-1">Last Month&apos;s Spend</p>
               <p className="text-2xl font-bold">&pound;{priorMonthSpend.toLocaleString("en-GB", { minimumFractionDigits: 2 })}</p>
@@ -52,7 +52,7 @@ export default async function DiscountPage() {
         {/* This month progress */}
         <div className="rounded-lg border border-[#1e1e2e] bg-[#12121a] p-6 mb-8">
           <h2 className="text-lg font-semibold mb-4">This Month&apos;s Progress</h2>
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <div>
               <p className="text-xs text-gray-500 mb-1">Current Month Spend</p>
               <p className="text-2xl font-bold">&pound;{currentMonthSpend.toLocaleString("en-GB", { minimumFractionDigits: 2 })}</p>

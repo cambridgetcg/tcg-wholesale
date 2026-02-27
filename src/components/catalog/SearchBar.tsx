@@ -58,13 +58,13 @@ export default function SearchBar({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <div className="flex">
+      <div className="flex w-full sm:w-auto">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") submitSearch(); }}
           placeholder="Search by name, card number, or SKU..."
-          className="rounded-l bg-[#12121a] border border-[#1e1e2e] border-r-0 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none w-72"
+          className="rounded-l bg-[#12121a] border border-[#1e1e2e] border-r-0 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none w-full sm:w-72"
         />
         <button
           onClick={submitSearch}
