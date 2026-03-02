@@ -78,6 +78,9 @@ export default function Nav() {
               <Link href="/orders" className="hover:text-brand-500 transition">
                 Orders
               </Link>
+              <Link href="/fulfillment" className="hover:text-brand-500 transition">
+                Fulfillment
+              </Link>
               <Link href="/discount" className="hover:text-brand-500 transition">
                 Discounts
               </Link>
@@ -128,6 +131,9 @@ export default function Nav() {
               </Link>
               <Link href="/orders" className="hover:text-brand-500 transition" onClick={() => setMenuOpen(false)}>
                 Orders
+              </Link>
+              <Link href="/fulfillment" className="hover:text-brand-500 transition" onClick={() => setMenuOpen(false)}>
+                Fulfillment
               </Link>
               <Link href="/discount" className="hover:text-brand-500 transition" onClick={() => setMenuOpen(false)}>
                 Discounts
