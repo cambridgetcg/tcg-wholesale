@@ -44,8 +44,15 @@ function parseCondition(raw: string | null): string {
 // Derive set code from card number
 function deriveSetCode(cardNumber: string): string | null {
   if (/^P-\d+$/.test(cardNumber)) return "PROMO";
-  const m = cardNumber.match(/^((?:OP|ST|EB|PRB)\d{2})-/);
-  return m ? m[1] : null;
+  // One Piece: OP01-001, ST13-001, EB01-001, PRB01-001
+  const opMatch = cardNumber.match(/^((?:OP|ST|EB|PRB)\d{2})-/);
+  if (opMatch) return opMatch[1];
+  // Dragon Ball: FB01-001, FS01-001, SB01-001
+  const dbMatch = cardNumber.match(/^((?:FB|FS|SB)\d{2})-/);
+  if (dbMatch) return dbMatch[1];
+  // Pokemon: NNN/NNN — set code must come from the filename, not the card number
+  if (/^\d{3}\/\d{3}$/.test(cardNumber)) return null;
+  return null;
 }
 
 // Extract rarity from display name

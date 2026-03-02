@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { orders, orderItems, cards, orderStatusHistory } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -25,7 +25,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     .select({
       id: orderItems.id,
       cardId: orderItems.cardId,
-      cardNumber: cards.cardNumber,
+      cardNumber: sql<string>`coalesce(${cards.cardNumber}, 'Unknown')`.as("card_number"),
       imageUrl: cards.imageUrl,
       cardrushJpy: cards.cardrushJpy,
       cardrushUrl: cards.cardrushUrl,
@@ -35,7 +35,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       stockStatus: orderItems.stockStatus,
     })
     .from(orderItems)
-    .innerJoin(cards, eq(orderItems.cardId, cards.id))
+    .leftJoin(cards, eq(orderItems.cardId, cards.id))
     .where(eq(orderItems.orderId, orderId));
 
   return NextResponse.json(items);
@@ -99,7 +99,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   // Set quoted timestamps
   const quotedAt = new Date();
-  const quotedExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const quotedExpiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
 
   await db.update(orders)
     .set({

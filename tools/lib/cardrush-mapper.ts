@@ -6,8 +6,8 @@
 // in product-group-ID order (ascending) so lower IDs claim the base SKU first.
 
 import { RawProduct, isGraded } from "./cardrush-parser";
-import { MIN_PRICE_JPY } from "./config";
-import { calculatePrice, type PriceBreakdown } from "../../src/lib/pricing";
+import { MIN_PRICE_JPY, type GameMapConfig } from "./config";
+import { calculatePrice, calculateSealedPrice, type PriceBreakdown } from "../../src/lib/pricing";
 
 export interface WholesaleCard {
   cardNumber: string;
@@ -33,21 +33,25 @@ export interface SkuTracker {
   nextP: number; // starts at 1
 }
 
-export type GlobalSkuState = Map<string, SkuTracker>;
+export interface GlobalSkuState {
+  skus: Map<string, SkuTracker>;
+  /** Tracks seen productUrls to skip duplicates across sets (e.g. PRB re-lists original-set cards) */
+  seenUrls: Set<string>;
+}
 
 export function createSkuState(): GlobalSkuState {
-  return new Map();
+  return { skus: new Map(), seenUrls: new Set() };
 }
 
 function assignSku(
-  state: GlobalSkuState,
+  skuMap: Map<string, SkuTracker>,
   baseSku: string,
   isParallel: boolean
 ): string {
-  let tracker = state.get(baseSku);
+  let tracker = skuMap.get(baseSku);
   if (!tracker) {
     tracker = { baseTaken: false, nextP: 1 };
-    state.set(baseSku, tracker);
+    skuMap.set(baseSku, tracker);
   }
 
   // Standard cards get the base SKU if it's still available
@@ -67,24 +71,26 @@ function assignSku(
 // ---------------------------------------------------------------------------
 
 // Clean display name by stripping metadata markers
-function cleanName(raw: string): string {
-  return raw
+function cleanName(raw: string, extraCleaner?: (name: string) => string): string {
+  let cleaned = raw
     .replace(/\{[^}]+\}/g, "")          // {OP01-001}
     .replace(/【[^】]+】/g, "")           // 【SR】
     .replace(/〔[^〕]+〕/g, "")           // 〔状態A-〕
     .replace(/パラレル/g, "")             // パラレル
+    .replace(/ミラー/g, "")              // ミラー (Pokemon mirrors)
     .replace(/\([^)]*alternate[^)]*\)/gi, "") // (alternate art) variants
     .replace(/\s+/g, " ")
     .trim();
+  if (extraCleaner) cleaned = extraCleaner(cleaned).trim();
+  return cleaned;
 }
 
-// Generate base SKU (without parallel suffix)
-// e.g. OP01-001 → OP-OP01-001-JP, P-001 → P-P-001-JP, DON → DON-JP
-function generateBaseSku(cardNumber: string): string {
+// Default base SKU generator (One Piece / Dragon Ball)
+function defaultGenerateBaseSku(cardNumber: string): string {
   if (cardNumber === "DON" || cardNumber === "P") {
     return `${cardNumber}-JP`;
   }
-  const prefix = cardNumber.match(/^(OP|ST|EB|PRB|P)/)?.[1] ?? "OP";
+  const prefix = cardNumber.match(/^(OP|ST|EB|PRB|FB|FS|SB|P|E)/)?.[1] ?? "OP";
   return `${prefix}-${cardNumber}-JP`;
 }
 
@@ -96,9 +102,13 @@ export function mapToWholesale(
   rawProducts: RawProduct[],
   setCode: string,
   gbpJpyRate: number,
-  skuState?: GlobalSkuState
+  skuState?: GlobalSkuState,
+  mapConfig?: GameMapConfig
 ): WholesaleCard[] {
   const state = skuState ?? createSkuState();
+  const { skus: skuMap, seenUrls } = state;
+  const genSku = mapConfig?.generateBaseSku ?? defaultGenerateBaseSku;
+  const extraCleaner = mapConfig?.cleanNameExtra;
 
   // Step 1: Filter out unwanted products
   const filtered = rawProducts.filter((p) => {
@@ -129,14 +139,20 @@ export function mapToWholesale(
   for (const [cardNum, group] of standardGroups) {
     group.sort((a, b) => a.priceJpy - b.priceJpy);
     const p = group[0];
-    const baseSku = generateBaseSku(cardNum);
-    const sku = assignSku(state, baseSku, false);
+
+    // Skip if this exact product URL was already mapped from a prior set
+    if (p.productUrl && seenUrls.has(p.productUrl)) continue;
+
+    const baseSku = genSku(cardNum, setCode);
+    const sku = assignSku(skuMap, baseSku, false);
     const pricing = calculatePrice(p.priceJpy, gbpJpyRate);
+
+    if (p.productUrl) seenUrls.add(p.productUrl);
 
     wholesale.push({
       cardNumber: cardNum,
       sku,
-      name: cleanName(p.name),
+      name: cleanName(p.name, extraCleaner),
       setCode,
       rarity: p.rarity,
       isParallel: false,
@@ -153,7 +169,7 @@ export function mapToWholesale(
     // Dedup by name (same art variant may have multiple condition listings)
     const seen = new Map<string, RawProduct>();
     for (const p of group) {
-      const key = cleanName(p.name);
+      const key = cleanName(p.name, extraCleaner);
       const existing = seen.get(key);
       if (!existing || p.priceJpy < existing.priceJpy) {
         seen.set(key, p);
@@ -162,16 +178,21 @@ export function mapToWholesale(
 
     // Sort by price ascending
     const variants = [...seen.values()].sort((a, b) => a.priceJpy - b.priceJpy);
-    const baseSku = generateBaseSku(cardNum);
+    const baseSku = genSku(cardNum, setCode);
 
     for (const p of variants) {
-      const sku = assignSku(state, baseSku, true);
+      // Skip if this exact product URL was already mapped from a prior set
+      if (p.productUrl && seenUrls.has(p.productUrl)) continue;
+
+      const sku = assignSku(skuMap, baseSku, true);
       const pricing = calculatePrice(p.priceJpy, gbpJpyRate);
+
+      if (p.productUrl) seenUrls.add(p.productUrl);
 
       wholesale.push({
         cardNumber: cardNum,
         sku,
-        name: cleanName(p.name),
+        name: cleanName(p.name, extraCleaner),
         setCode,
         rarity: p.rarity,
         isParallel: true,
@@ -248,7 +269,7 @@ export function mapSealedToWholesale(
     if (!productId) continue;
 
     const sku = `SEALED-${productId}-JP`;
-    const pricing = calculatePrice(p.priceJpy, gbpJpyRate);
+    const pricing = calculateSealedPrice(p.priceJpy, gbpJpyRate);
 
     wholesale.push({
       cardNumber: `SEALED-${productId}`,

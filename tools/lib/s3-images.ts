@@ -9,7 +9,7 @@ import {
 import { REQUEST_DELAY_MS } from "./config";
 import type { WholesaleCard } from "./cardrush-mapper";
 
-const IMAGE_BUCKET = "jp-op-photos";
+const DEFAULT_BUCKET = "jp-op-photos";
 const REGION = "us-east-1";
 
 function sleep(ms: number): Promise<void> {
@@ -26,13 +26,13 @@ function s3Key(card: WholesaleCard): string {
   return `${card.setCode}/${card.sku}.jpeg`;
 }
 
-export function s3ImageUrl(card: WholesaleCard): string {
-  return `https://${IMAGE_BUCKET}.s3.${REGION}.amazonaws.com/${s3Key(card)}`;
+export function s3ImageUrl(card: WholesaleCard, bucket: string = DEFAULT_BUCKET): string {
+  return `https://${bucket}.s3.${REGION}.amazonaws.com/${s3Key(card)}`;
 }
 
-async function objectExists(s3: S3Client, key: string): Promise<boolean> {
+async function objectExists(s3: S3Client, key: string, bucket: string): Promise<boolean> {
   try {
-    await s3.send(new HeadObjectCommand({ Bucket: IMAGE_BUCKET, Key: key }));
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
     return true;
   } catch {
     return false;
@@ -57,7 +57,8 @@ async function downloadImage(url: string): Promise<Buffer | null> {
 }
 
 export async function uploadImagesToS3(
-  cards: WholesaleCard[]
+  cards: WholesaleCard[],
+  bucket: string = DEFAULT_BUCKET
 ): Promise<{ uploaded: number; skipped: number; failed: number }> {
   const s3 = getS3Client();
   let uploaded = 0;
@@ -75,7 +76,7 @@ export async function uploadImagesToS3(
     }
 
     // Skip if already in S3
-    if (await objectExists(s3, key)) {
+    if (await objectExists(s3, key, bucket)) {
       skipped++;
       continue;
     }
@@ -92,7 +93,7 @@ export async function uploadImagesToS3(
     try {
       await s3.send(
         new PutObjectCommand({
-          Bucket: IMAGE_BUCKET,
+          Bucket: bucket,
           Key: key,
           Body: imageData,
           ContentType: "image/jpeg",

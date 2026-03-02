@@ -111,6 +111,8 @@ export default async function CatalogPage({
   let orderByClause;
   if (sortField === "price") {
     orderByClause = sortOrder === "desc" ? desc(cards.priceExVat) : asc(cards.priceExVat);
+  } else if (sortField === "name") {
+    orderByClause = sortOrder === "desc" ? desc(cards.name) : asc(cards.name);
   } else if (sortField === "set") {
     // Sort by setCode then cardNumber within set
     orderByClause = sortOrder === "desc"
@@ -179,7 +181,7 @@ export default async function CatalogPage({
               <CategoryToggle currentCategory={categoryFilter} />
             </Suspense>
             <Suspense>
-              <SearchBar sets={sets} currentQuery={query} currentSet={setFilter} currentSort={sortField} currentOrder={sortOrder} currentPriceMin={priceMin} currentPriceMax={priceMax} />
+              <SearchBar sets={sets} currentQuery={query} currentSet={setFilter} currentSort={sortField} currentOrder={sortOrder} currentPriceMin={priceMin} currentPriceMax={priceMax} currentCategory={categoryFilter} />
             </Suspense>
           </div>
 
@@ -211,6 +213,7 @@ export default async function CatalogPage({
               currentOrder={sortOrder}
               volumeDiscountPct={volumeDiscountPct}
               lastSynced={lastSynced instanceof Date ? lastSynced.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : null}
+              currentCategory={categoryFilter}
             />
           </Suspense>
 

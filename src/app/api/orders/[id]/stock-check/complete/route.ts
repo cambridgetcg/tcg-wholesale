@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { orderItems, orders, cards, orderStatusHistory } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
-import { calculatePrice } from "@/lib/pricing";
+import { calculatePriceByCategory } from "@/lib/pricing";
 import { sendOrderEmail } from "@/lib/email/send-order-email";
 
 export async function POST(
@@ -64,7 +64,7 @@ export async function POST(
     const [card] = await db.select().from(cards).where(eq(cards.id, item.cardId)).limit(1);
     if (!card || !card.gbpJpyRate) continue;
 
-    const newPrice = calculatePrice(item.checkedPriceJpy!, card.gbpJpyRate);
+    const newPrice = calculatePriceByCategory(item.checkedPriceJpy!, card.gbpJpyRate, card.category);
     // Sanity check: reject prices that are negative or more than 10x the original
     if (newPrice.priceExVat <= 0 || (item.unitPriceExVat > 0 && newPrice.priceExVat > item.unitPriceExVat * 10)) {
       return NextResponse.json({
@@ -93,7 +93,7 @@ export async function POST(
     if (item.checkedPriceJpy != null) {
       const [card] = await db.select().from(cards).where(eq(cards.id, item.cardId)).limit(1);
       if (card?.gbpJpyRate) {
-        const newPrice = calculatePrice(item.checkedPriceJpy, card.gbpJpyRate);
+        const newPrice = calculatePriceByCategory(item.checkedPriceJpy, card.gbpJpyRate, card.category);
         if (newPrice.priceExVat > 0 && (item.unitPriceExVat === 0 || newPrice.priceExVat <= item.unitPriceExVat * 10)) {
           unitPrice = newPrice.priceExVat;
         }
@@ -119,7 +119,7 @@ export async function POST(
   const newTotal = Math.round(remaining.reduce((sum, i) => sum + i.lineTotal, 0) * 100) / 100;
 
   const now = new Date();
-  const quotedExpiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const quotedExpiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
 
   await db.update(orders)
     .set({

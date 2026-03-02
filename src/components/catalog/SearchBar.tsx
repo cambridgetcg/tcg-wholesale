@@ -12,6 +12,7 @@ export default function SearchBar({
   currentOrder,
   currentPriceMin,
   currentPriceMax,
+  currentCategory = "singles",
 }: {
   sets: { code: string; name: string }[];
   currentQuery: string;
@@ -20,6 +21,7 @@ export default function SearchBar({
   currentOrder: string;
   currentPriceMin: string;
   currentPriceMax: string;
+  currentCategory?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -115,13 +117,25 @@ export default function SearchBar({
         }}
         className="rounded bg-[#12121a] border border-[#1e1e2e] px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
       >
-        <option value="cardNumber-asc">Card # (A→Z)</option>
-        <option value="cardNumber-desc">Card # (Z→A)</option>
-        <option value="price-asc">Price: Low → High</option>
-        <option value="price-desc">Price: High → Low</option>
-        <option value="set-asc">Set (A→Z)</option>
-        <option value="set-desc">Set (Z→A)</option>
-        <option value="newest-desc">Newest First</option>
+        {currentCategory === "sealed" ? (
+          <>
+            <option value="name-asc">Name (A→Z)</option>
+            <option value="name-desc">Name (Z→A)</option>
+            <option value="price-asc">Price: Low → High</option>
+            <option value="price-desc">Price: High → Low</option>
+            <option value="newest-desc">Newest First</option>
+          </>
+        ) : (
+          <>
+            <option value="cardNumber-asc">Card # (A→Z)</option>
+            <option value="cardNumber-desc">Card # (Z→A)</option>
+            <option value="price-asc">Price: Low → High</option>
+            <option value="price-desc">Price: High → Low</option>
+            <option value="set-asc">Set (A→Z)</option>
+            <option value="set-desc">Set (Z→A)</option>
+            <option value="newest-desc">Newest First</option>
+          </>
+        )}
       </select>
     </div>
   );

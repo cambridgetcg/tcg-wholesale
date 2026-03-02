@@ -2,9 +2,17 @@
 // CardRush Scraper — scrapes product-group pages, maps to wholesale, upserts to DB
 // Usage: npx tsx tools/scrape-cardrush.ts OP01 [--dry-run] [--discover] [--set-all] [--prices-only]
 
-import { writeFileSync, mkdirSync } from "fs";
+import { writeFileSync, mkdirSync, readFileSync, existsSync } from "fs";
+
+// Load .env.local (overrides shell env — .env.local is the source of truth)
+if (existsSync(".env.local")) {
+  for (const line of readFileSync(".env.local", "utf-8").split("\n")) {
+    const m = line.match(/^([A-Z_]+)="?(.*?)"?\s*$/);
+    if (m) process.env[m[1]] = m[2];
+  }
+}
 import { join } from "path";
-import { getSetConfig, getAllSetCodes, SET_CONFIGS } from "./lib/config";
+import { getSetConfig, getAllSetCodes, getGameConfig, SET_CONFIGS, type GameConfig } from "./lib/config";
 import { fetchGbpJpyRate } from "./lib/fx-rate";
 import { fetchProductGroupPages, fetchProductListPages, fetchDiscoveryPage } from "./lib/cardrush-client";
 import {
@@ -33,14 +41,24 @@ const skipImages = flags.has("--skip-images");
 const pricesOnly = flags.has("--prices-only"); // Skip images, only update prices + price_history
 const sealed = flags.has("--sealed"); // Scrape sealed products from product-list page
 
+// Parse --game=<code> flag (default: onepiece)
+const gameFlag = args.find((a) => a.startsWith("--game="));
+const gameCode = gameFlag ? gameFlag.split("=")[1] : "onepiece";
+const resolvedGameConfig = getGameConfig(gameCode);
+if (!resolvedGameConfig) {
+  console.error(`Unknown game: ${gameCode}. Known games: onepiece, dragonball, pokemon`);
+  process.exit(1);
+}
+const gameConfig: GameConfig = resolvedGameConfig;
+
 // ---------------------------------------------------------------------------
 // Discovery mode
 // ---------------------------------------------------------------------------
 
-async function runDiscover() {
-  console.log("\n=== CardRush Product-Group Discovery ===\n");
-  const html = await fetchDiscoveryPage();
-  const groups = parseDiscoveryPage(html);
+async function runDiscover(gc: GameConfig) {
+  console.log(`\n=== CardRush Product-Group Discovery (${gc.dbGameName}) ===\n`);
+  const html = await fetchDiscoveryPage(gc.baseUrl);
+  const groups = parseDiscoveryPage(html, gc.baseUrl);
 
   if (groups.length === 0) {
     console.log("No product-group links found. The page structure may have changed.");
@@ -69,7 +87,7 @@ async function runDiscover() {
 // Main scrape pipeline
 // ---------------------------------------------------------------------------
 
-async function scrapeSet(setCode: string, skuState?: GlobalSkuState) {
+async function scrapeSet(setCode: string, gc: GameConfig, skuState?: GlobalSkuState) {
   const startTime = Date.now();
   const config = getSetConfig(setCode);
   if (!config) {
@@ -91,13 +109,13 @@ async function scrapeSet(setCode: string, skuState?: GlobalSkuState) {
 
   // Step 2: Fetch all pages
   console.log("[2/7] Fetching product pages...");
-  const htmlPages = await fetchProductGroupPages(config.productGroupId, config.maxPages);
+  const htmlPages = await fetchProductGroupPages(config.productGroupId, config.maxPages, gc.baseUrl);
 
   // Step 3: Parse HTML → raw products
   console.log("[3/7] Parsing HTML...");
   const rawProducts: RawProduct[] = [];
   for (const html of htmlPages) {
-    const parsed = parseProductGroupPage(html);
+    const parsed = parseProductGroupPage(html, gc.baseUrl, gc.parse);
     rawProducts.push(...parsed);
   }
   console.log(`  Parsed ${rawProducts.length} raw product listings`);
@@ -113,7 +131,7 @@ async function scrapeSet(setCode: string, skuState?: GlobalSkuState) {
 
   // Step 5: Map to wholesale
   console.log("[5/7] Mapping to wholesale...");
-  const wholesale = mapToWholesale(rawProducts, setCode, gbpJpyRate, skuState);
+  const wholesale = mapToWholesale(rawProducts, setCode, gbpJpyRate, skuState, gc.map);
 
   // Save wholesale JSON
   const wsDir = join("data", "cardrush", "wholesale");
@@ -130,13 +148,13 @@ async function scrapeSet(setCode: string, skuState?: GlobalSkuState) {
     console.log(`\n[6/7] Skipping image upload (${pricesOnly ? "--prices-only" : "--skip-images"})`);
   } else {
     console.log("\n[6/7] Uploading images to S3...");
-    const imgResult = await uploadImagesToS3(wholesale);
+    const imgResult = await uploadImagesToS3(wholesale, gc.s3Bucket);
     console.log(`  Uploaded: ${imgResult.uploaded}, Skipped: ${imgResult.skipped}, Failed: ${imgResult.failed}`);
 
     // Set S3 URLs on wholesale cards for DB upsert
     for (const card of wholesale) {
       if (card.imageUrl) {
-        card.imageUrl = s3ImageUrl(card);
+        card.imageUrl = s3ImageUrl(card, gc.s3Bucket);
       }
     }
 
@@ -149,7 +167,7 @@ async function scrapeSet(setCode: string, skuState?: GlobalSkuState) {
     console.log("\n[7/7] Skipping DB upsert (--dry-run)");
   } else {
     console.log("\n[7/7] Upserting to database...");
-    await upsertToDb(wholesale, config.gameCode, setCode, gbpJpyRate, today);
+    await upsertToDb(wholesale, gc, setCode, gbpJpyRate, today);
   }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -199,7 +217,7 @@ function printSummary(
 
 async function upsertToDb(
   wholesale: WholesaleCard[],
-  gameCode: string,
+  gc: GameConfig,
   setCode: string,
   gbpJpyRate: number,
   today: string
@@ -214,11 +232,11 @@ async function upsertToDb(
 
   try {
     // Get-or-create game
-    let [game] = await sql`SELECT id FROM games WHERE code = ${gameCode}`;
+    let [game] = await sql`SELECT id FROM games WHERE code = ${gc.dbGameCode}`;
     if (!game) {
       [game] = await sql`
         INSERT INTO games (code, name, slug, active, sort_order)
-        VALUES (${gameCode}, 'One Piece', 'one-piece', true, 0)
+        VALUES (${gc.dbGameCode}, ${gc.dbGameName}, ${gc.dbGameSlug}, true, 0)
         RETURNING id`;
     }
 
@@ -345,12 +363,10 @@ async function upsertToDb(
 // Sealed product scraping
 // ---------------------------------------------------------------------------
 
-const SEALED_LIST_ID = 4; // product-list/4 = unopened boxes
-
-async function scrapeSealed() {
+async function scrapeSealed(gc: GameConfig) {
   const startTime = Date.now();
-  console.log("\n=== Scraping Sealed Products ===");
-  console.log(`  Product list: ${SEALED_LIST_ID}`);
+  console.log(`\n=== Scraping Sealed Products (${gc.dbGameName}) ===`);
+  console.log(`  Product list: ${gc.sealedListId}`);
   const mode = dryRun ? "DRY RUN (no DB)" : "FULL (with DB upsert)";
   console.log(`  Mode: ${mode}\n`);
 
@@ -360,13 +376,13 @@ async function scrapeSealed() {
 
   // Step 2: Fetch all pages
   console.log("[2/6] Fetching product-list pages...");
-  const htmlPages = await fetchProductListPages(SEALED_LIST_ID);
+  const htmlPages = await fetchProductListPages(gc.sealedListId, 20, gc.baseUrl);
 
   // Step 3: Parse HTML → raw products
   console.log("[3/6] Parsing HTML...");
   const rawProducts: RawProduct[] = [];
   for (const html of htmlPages) {
-    const parsed = parseProductGroupPage(html); // same HTML structure
+    const parsed = parseProductGroupPage(html, gc.baseUrl, gc.parse); // same HTML structure
     rawProducts.push(...parsed);
   }
   console.log(`  Parsed ${rawProducts.length} raw product listings`);
@@ -412,7 +428,7 @@ async function scrapeSealed() {
     console.log("\n[6/6] Skipping DB upsert (--dry-run)");
   } else {
     console.log("\n[6/6] Upserting to database...");
-    await upsertSealedToDb(wholesale, gbpJpyRate, today);
+    await upsertSealedToDb(wholesale, gc, gbpJpyRate, today);
   }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -421,6 +437,7 @@ async function scrapeSealed() {
 
 async function upsertSealedToDb(
   wholesale: WholesaleCard[],
+  gc: GameConfig,
   gbpJpyRate: number,
   today: string
 ) {
@@ -433,12 +450,12 @@ async function upsertSealedToDb(
   const sql = postgres(connectionString, { max: 1, ssl: "require" });
 
   try {
-    // Get-or-create game (One Piece)
-    let [game] = await sql`SELECT id FROM games WHERE code = ${"onepiece"}`;
+    // Get-or-create game
+    let [game] = await sql`SELECT id FROM games WHERE code = ${gc.dbGameCode}`;
     if (!game) {
       [game] = await sql`
         INSERT INTO games (code, name, slug, active, sort_order)
-        VALUES ('onepiece', 'One Piece', 'one-piece', true, 0)
+        VALUES (${gc.dbGameCode}, ${gc.dbGameName}, ${gc.dbGameSlug}, true, 0)
         RETURNING id`;
     }
 
@@ -559,24 +576,24 @@ async function upsertSealedToDb(
 
 async function main() {
   if (discover) {
-    await runDiscover();
+    await runDiscover(gameConfig);
     return;
   }
 
   if (sealed) {
-    await scrapeSealed();
+    await scrapeSealed(gameConfig);
     return;
   }
 
   if (setAll) {
-    const codes = getAllSetCodes(); // sorted by product-group ID ascending
-    console.log(`\n=== Scraping all ${codes.length} sets (by product-group order) ===\n`);
+    const codes = getAllSetCodes(gameCode); // sorted by product-group ID ascending, filtered by game
+    console.log(`\n=== Scraping all ${codes.length} ${gameConfig.dbGameName} sets (by product-group order) ===\n`);
     const scrapeStartDate = new Date().toISOString().slice(0, 10); // capture before scraping
     const totalStart = Date.now();
     const globalSkuState = createSkuState();
     for (let i = 0; i < codes.length; i++) {
       console.log(`\n[${ i + 1}/${codes.length}]`);
-      await scrapeSet(codes[i], globalSkuState);
+      await scrapeSet(codes[i], gameConfig, globalSkuState);
     }
     const totalElapsed = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log(`\n=== All ${codes.length} sets complete in ${totalElapsed} min ===`);
@@ -586,11 +603,14 @@ async function main() {
       const connectionString = process.env.DATABASE_URL;
       if (connectionString) {
         const sql = postgres(connectionString, { max: 1, ssl: "require" });
+        const [game] = await sql`SELECT id FROM games WHERE code = ${gameConfig.dbGameCode}`;
+        const gameId = game?.id;
         const staleIds = await sql`
           SELECT id FROM cards
           WHERE category = 'singles'
             AND (last_synced_at IS NULL OR last_synced_at::date < ${scrapeStartDate}::date)
-            AND id NOT IN (SELECT DISTINCT card_id FROM order_items)`;
+            AND id NOT IN (SELECT DISTINCT card_id FROM order_items)
+            ${gameId ? sql`AND game_id = ${gameId}` : sql``}`;
         if (staleIds.length > 0) {
           const ids = staleIds.map((r: any) => r.id);
           await sql`DELETE FROM price_history WHERE card_id = ANY(${ids})`;
@@ -606,14 +626,14 @@ async function main() {
 
   const setCode = positional[0]?.toUpperCase();
   if (!setCode) {
-    console.error("Usage: npx tsx tools/scrape-cardrush.ts <SET_CODE> [--dry-run] [--skip-images] [--prices-only]");
-    console.error("       npx tsx tools/scrape-cardrush.ts --sealed [--dry-run]");
-    console.error("       npx tsx tools/scrape-cardrush.ts --discover");
-    console.error(`\nKnown sets: ${getAllSetCodes().join(", ")}`);
+    console.error("Usage: npx tsx tools/scrape-cardrush.ts <SET_CODE> [--game=onepiece|dragonball|pokemon] [--dry-run] [--skip-images] [--prices-only]");
+    console.error("       npx tsx tools/scrape-cardrush.ts --sealed [--game=onepiece|dragonball|pokemon] [--dry-run]");
+    console.error("       npx tsx tools/scrape-cardrush.ts --discover [--game=onepiece|dragonball|pokemon]");
+    console.error(`\nKnown sets (${gameCode}): ${getAllSetCodes(gameCode).join(", ")}`);
     process.exit(1);
   }
 
-  await scrapeSet(setCode);
+  await scrapeSet(setCode, gameConfig);
 }
 
 main().catch((err) => {

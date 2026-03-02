@@ -25,12 +25,14 @@ export default function CardTable({
   currentOrder,
   volumeDiscountPct,
   lastSynced,
+  currentCategory = "singles",
 }: {
   cards: CardRow[];
   currentSort: string;
   currentOrder: string;
   volumeDiscountPct: number;
   lastSynced: string | null;
+  currentCategory?: string;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -78,12 +80,21 @@ export default function CardTable({
         <thead className="bg-[#12121a]">
           <tr className="text-left text-gray-400">
             <th className="px-2 md:px-4 py-3 font-medium w-14"></th>
-            <th
-              className="px-2 md:px-4 py-3 font-medium cursor-pointer hover:text-gray-200 transition select-none"
-              onClick={() => toggleSort("cardNumber")}
-            >
-              Card #{sortIndicator("cardNumber")}
-            </th>
+            {currentCategory === "sealed" ? (
+              <th
+                className="px-2 md:px-4 py-3 font-medium cursor-pointer hover:text-gray-200 transition select-none"
+                onClick={() => toggleSort("name")}
+              >
+                Name{sortIndicator("name")}
+              </th>
+            ) : (
+              <th
+                className="px-2 md:px-4 py-3 font-medium cursor-pointer hover:text-gray-200 transition select-none"
+                onClick={() => toggleSort("cardNumber")}
+              >
+                Card #{sortIndicator("cardNumber")}
+              </th>
+            )}
             <th className="hidden md:table-cell px-4 py-3 font-medium">SKU</th>
             <th
               className="hidden md:table-cell px-4 py-3 font-medium cursor-pointer hover:text-gray-200 transition select-none"
@@ -129,7 +140,7 @@ export default function CardTable({
                   )}
                 </td>
                 <td className="px-2 md:px-4 py-3 font-mono text-brand-500">
-                  {card.cardNumber}
+                  {currentCategory === "sealed" ? (card.name || card.cardNumber) : card.cardNumber}
                 </td>
                 <td className="hidden md:table-cell px-4 py-3 text-gray-400 font-mono text-xs">
                   {card.sku}

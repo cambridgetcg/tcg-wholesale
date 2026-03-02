@@ -1,7 +1,7 @@
 // HTTP client for CardRush product-group pages
 // Handles pagination, rate limiting, retry, and proxy fallback
 
-import { CARDRUSH_BASE_URL, ITEMS_PER_PAGE, REQUEST_DELAY_MS } from "./config";
+import { ITEMS_PER_PAGE, REQUEST_DELAY_MS } from "./config";
 
 const MAX_RETRIES = 3;
 const INITIAL_BACKOFF_MS = 2000;
@@ -79,13 +79,14 @@ async function fetchWithProxy(url: string, proxyUrl: string): Promise<string> {
 
 export async function fetchProductGroupPages(
   productGroupId: number,
-  maxPages: number = 20
+  maxPages: number = 20,
+  baseUrl: string = "https://www.cardrush-op.jp"
 ): Promise<string[]> {
   const pages: string[] = [];
   let page = 1;
 
   while (true) {
-    const url = `${CARDRUSH_BASE_URL}/product-group/${productGroupId}?limit=${ITEMS_PER_PAGE}&page=${page}`;
+    const url = `${baseUrl}/product-group/${productGroupId}?limit=${ITEMS_PER_PAGE}&page=${page}`;
     console.log(`  Fetching page ${page}: ${url}`);
 
     const html = await fetchWithRetry(url);
@@ -124,13 +125,14 @@ export async function fetchProductGroupPages(
 
 export async function fetchProductListPages(
   listId: number,
-  maxPages: number = 20
+  maxPages: number = 20,
+  baseUrl: string = "https://www.cardrush-op.jp"
 ): Promise<string[]> {
   const pages: string[] = [];
   let page = 1;
 
   while (true) {
-    const url = `${CARDRUSH_BASE_URL}/product-list/${listId}?page=${page}`;
+    const url = `${baseUrl}/product-list/${listId}?page=${page}`;
     console.log(`  Fetching page ${page}: ${url}`);
 
     const html = await fetchWithRetry(url);
@@ -163,8 +165,10 @@ export async function fetchProductListPages(
   return pages;
 }
 
-export async function fetchDiscoveryPage(): Promise<string> {
-  const url = `${CARDRUSH_BASE_URL}/product-group/`;
+export async function fetchDiscoveryPage(
+  baseUrl: string = "https://www.cardrush-op.jp"
+): Promise<string> {
+  const url = `${baseUrl}/product-group/`;
   console.log(`  Fetching product-group index: ${url}`);
   return await fetchWithRetry(url);
 }

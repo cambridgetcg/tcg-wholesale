@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
 import { orders, orderItems, cards, clients } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { calculatePrice } from "@/lib/pricing";
+import { calculatePriceByCategory } from "@/lib/pricing";
 import StockCheckClient from "./StockCheckClient";
 
 export default async function StockCheckPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,11 +23,12 @@ export default async function StockCheckPage({ params }: { params: Promise<{ id:
     .select({
       id: orderItems.id,
       cardId: orderItems.cardId,
-      cardNumber: cards.cardNumber,
+      cardNumber: sql<string>`coalesce(${cards.cardNumber}, 'Unknown')`.as("card_number"),
       imageUrl: cards.imageUrl,
       cardrushUrl: cards.cardrushUrl,
       cardrushJpy: cards.cardrushJpy,
       gbpJpyRate: cards.gbpJpyRate,
+      category: cards.category,
       quantity: orderItems.quantity,
       unitPriceExVat: orderItems.unitPriceExVat,
       lineTotal: orderItems.lineTotal,
@@ -36,7 +37,7 @@ export default async function StockCheckPage({ params }: { params: Promise<{ id:
       checkedQuantity: orderItems.checkedQuantity,
     })
     .from(orderItems)
-    .innerJoin(cards, eq(orderItems.cardId, cards.id))
+    .leftJoin(cards, eq(orderItems.cardId, cards.id))
     .where(eq(orderItems.orderId, orderId));
 
   // Calculate price discrepancies
@@ -44,7 +45,7 @@ export default async function StockCheckPage({ params }: { params: Promise<{ id:
     let priceDiffPct: number | null = null;
     let currentCalcPrice: number | null = null;
     if (item.cardrushJpy && item.gbpJpyRate) {
-      const current = calculatePrice(item.cardrushJpy, item.gbpJpyRate);
+      const current = calculatePriceByCategory(item.cardrushJpy, item.gbpJpyRate, item.category);
       currentCalcPrice = current.priceExVat;
       const diff = Math.abs(current.priceExVat - item.unitPriceExVat) / item.unitPriceExVat;
       if (diff > 0.05) priceDiffPct = diff;

@@ -2,7 +2,7 @@
 // Uses cheerio to extract product listings from server-rendered pages
 
 import * as cheerio from "cheerio";
-import { CARDRUSH_BASE_URL } from "./config";
+import type { GameParseConfig } from "./config";
 
 export interface RawProduct {
   cardNumber: string | null;
@@ -23,22 +23,32 @@ export interface DiscoveredGroup {
 }
 
 // Regex patterns for extracting structured data from product names
-const CARD_NUMBER_RE = /\{((?:OP|ST|EB|PRB)\d{2}-\d{3}|P-\d{3})/;
 const PRICE_RE = /([\d,]+)円/;
 const RARITY_RE = /【([^】]+)】/;
 const STOCK_RE = /在庫数\s*(\d+)枚/;
 const CONDITION_RE = /〔([^〕]+)〕/;
-const PARALLEL_INDICATORS = ["パラレル", "/P"];
 const GRADED_INDICATORS = ["PSA", "BGS", "CGC", "ARS"];
 
-export function parseProductGroupPage(html: string): RawProduct[] {
+// Default parse config (One Piece) for backward compatibility
+const DEFAULT_PARSE_CONFIG: GameParseConfig = {
+  cardNumberRegex: /\{((?:OP|ST|EB|PRB|FB|FS|SB)\d{2}-\d{3}|[PE]-\d{3})/,
+  parallelIndicators: ["パラレル", "/P"],
+  parallelRarityCheck: (rarity) => rarity.includes("P"),
+  specialCards: { "ドン!!": "DON", "{P}": "P" },
+};
+
+export function parseProductGroupPage(
+  html: string,
+  baseUrl: string = "https://www.cardrush-op.jp",
+  parseConfig: GameParseConfig = DEFAULT_PARSE_CONFIG
+): RawProduct[] {
   const $ = cheerio.load(html);
   const products: RawProduct[] = [];
 
   // Each product is a <li class="list_item_cell"> inside <ul class="item_list">
   $("li.list_item_cell").each((_, el) => {
     const $el = $(el);
-    const product = extractProduct($, $el);
+    const product = extractProduct($, $el, baseUrl, parseConfig);
     if (product) {
       products.push(product);
     }
@@ -49,7 +59,9 @@ export function parseProductGroupPage(html: string): RawProduct[] {
 
 function extractProduct(
   $: cheerio.CheerioAPI,
-  $el: ReturnType<cheerio.CheerioAPI>
+  $el: ReturnType<cheerio.CheerioAPI>,
+  baseUrl: string,
+  parseConfig: GameParseConfig
 ): RawProduct | null {
   // Product name from .goods_name span
   const name = $el.find(".goods_name").text().trim();
@@ -61,13 +73,18 @@ function extractProduct(
   const priceJpy = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ""), 10) : 0;
   if (priceJpy === 0) return null;
 
-  // Card number from product name: {OP01-003}, {P-001}, {P}, {-}
-  const cardNumberMatch = name.match(CARD_NUMBER_RE);
+  // Card number from product name using game-specific regex
+  const cardNumberMatch = name.match(parseConfig.cardNumberRegex);
   let cardNumber: string | null = cardNumberMatch ? cardNumberMatch[1] : null;
-  if (!cardNumber && name.includes("ドン!!")) {
-    cardNumber = "DON";
-  } else if (!cardNumber && /\{P\}/.test(name)) {
-    cardNumber = "P";
+
+  // Fallback: check game-specific special cards (e.g. ドン!! → DON for One Piece)
+  if (!cardNumber) {
+    for (const [substring, value] of Object.entries(parseConfig.specialCards)) {
+      if (name.includes(substring)) {
+        cardNumber = value;
+        break;
+      }
+    }
   }
 
   // Rarity from product name: 【SR】
@@ -87,10 +104,10 @@ function extractProduct(
   const conditionMatch = name.match(CONDITION_RE);
   const condition = conditionMatch ? conditionMatch[1] : null;
 
-  // Parallel detection
+  // Parallel detection using game-specific indicators and rarity check
   const isParallel =
-    PARALLEL_INDICATORS.some((p) => name.includes(p)) ||
-    (rarity !== null && rarity.includes("P"));
+    parseConfig.parallelIndicators.some((p) => name.includes(p)) ||
+    (rarity !== null && parseConfig.parallelRarityCheck(rarity));
 
   // Product URL from .item_data_link or first anchor
   const href =
@@ -99,7 +116,7 @@ function extractProduct(
   const productUrl = href
     ? href.startsWith("http")
       ? href
-      : `${CARDRUSH_BASE_URL}${href}`
+      : `${baseUrl}${href}`
     : null;
 
   // Image URL from .global_photo img
@@ -109,7 +126,7 @@ function extractProduct(
   const imageUrl = imgSrc
     ? imgSrc.startsWith("http")
       ? imgSrc
-      : `${CARDRUSH_BASE_URL}${imgSrc}`
+      : `${baseUrl}${imgSrc}`
     : null;
 
   return {
@@ -132,7 +149,10 @@ export function isGraded(product: RawProduct): boolean {
   );
 }
 
-export function parseDiscoveryPage(html: string): DiscoveredGroup[] {
+export function parseDiscoveryPage(
+  html: string,
+  baseUrl: string = "https://www.cardrush-op.jp"
+): DiscoveredGroup[] {
   const $ = cheerio.load(html);
   const groups: DiscoveredGroup[] = [];
 
@@ -147,7 +167,7 @@ export function parseDiscoveryPage(html: string): DiscoveredGroup[] {
         groups.push({
           id,
           name,
-          url: `${CARDRUSH_BASE_URL}/product-group/${id}`,
+          url: `${baseUrl}/product-group/${id}`,
         });
       }
     }

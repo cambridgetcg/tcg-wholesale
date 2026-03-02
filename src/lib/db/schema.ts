@@ -114,6 +114,7 @@ export const orderItems = pgTable("order_items", {
   }).notNull().default("pending"),
   checkedPriceJpy: integer("checked_price_jpy"),
   checkedQuantity: integer("checked_quantity"),
+  remamboSubmittedAt: timestamp("remambo_submitted_at"),
 });
 
 export const priceHistory = pgTable("price_history", {
@@ -186,6 +187,52 @@ export const conditionPrices = pgTable("condition_prices", {
   dateIdx: index("condition_prices_date_idx").on(table.snapshotDate),
 }));
 
+export const fulfillmentEntries = pgTable("fulfillment_entries", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => orders.id),
+  orderItemId: integer("order_item_id").notNull().references(() => orderItems.id),
+  fulfilledQty: integer("fulfilled_qty").notNull(),
+  fulfillmentDate: date("fulfillment_date").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  itemDateUnique: uniqueIndex("fulfillment_entries_item_date_idx").on(table.orderItemId, table.fulfillmentDate),
+}));
+
+export const purchases = pgTable("purchases", {
+  id: serial("id").primaryKey(),
+  remamboOrderId: text("remambo_order_id").notNull(),
+  supplier: text("supplier").notNull().default("cardrush"),
+  parcelId: text("parcel_id"),
+  orderedAt: timestamp("ordered_at").notNull(),
+  shippedAt: timestamp("shipped_at"),
+  receivedAt: timestamp("received_at"),
+  status: text("status", {
+    enum: ["ordered", "shipped", "received"],
+  }).notNull().default("ordered"),
+  itemsTotalJpy: integer("items_total_jpy").notNull(),
+  serviceFeeJpy: integer("service_fee_jpy").notNull().default(0),
+  shippingJpy: integer("shipping_jpy").notNull().default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  remamboOrderIdx: uniqueIndex("purchases_remambo_order_idx").on(table.remamboOrderId),
+}));
+
+export const purchaseItems = pgTable("purchase_items", {
+  id: serial("id").primaryKey(),
+  purchaseId: integer("purchase_id").notNull().references(() => purchases.id),
+  cardId: integer("card_id").notNull().references(() => cards.id),
+  orderItemId: integer("order_item_id").references(() => orderItems.id),
+  condition: text("condition").notNull(),
+  quantity: integer("quantity").notNull(),
+  unitPriceJpy: integer("unit_price_jpy").notNull(),
+  cardrushUrl: text("cardrush_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  purchaseIdx: index("purchase_items_purchase_idx").on(table.purchaseId),
+  cardIdx: index("purchase_items_card_idx").on(table.cardId),
+}));
+
 export const cartItems = pgTable("cart_items", {
   id: serial("id").primaryKey(),
   clientId: integer("client_id").notNull().references(() => clients.id),
@@ -215,3 +262,6 @@ export type PriceArchiveRow = typeof priceArchive.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type OrderStatusHistoryRow = typeof orderStatusHistory.$inferSelect;
 export type ConditionPriceRow = typeof conditionPrices.$inferSelect;
+export type FulfillmentEntryRow = typeof fulfillmentEntries.$inferSelect;
+export type Purchase = typeof purchases.$inferSelect;
+export type PurchaseItem = typeof purchaseItems.$inferSelect;

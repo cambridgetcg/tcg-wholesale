@@ -17,6 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/prices" className="text-sm hover:text-brand-500 transition">Prices</Link>
           <Link href="/admin/games" className="text-sm hover:text-brand-500 transition">Games</Link>
           <Link href="/admin/clients" className="text-sm hover:text-brand-500 transition">Clients</Link>
+          <Link href="/admin/stock" className="text-sm hover:text-brand-500 transition">Stock</Link>
         </div>
         {children}
       </div>

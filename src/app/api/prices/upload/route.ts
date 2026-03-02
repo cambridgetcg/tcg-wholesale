@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { cards } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
-import { calculatePrice } from "@/lib/pricing";
+import { calculatePriceByCategory } from "@/lib/pricing";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -48,7 +48,8 @@ export async function POST(req: NextRequest) {
     const cardNumber = sku.split("-").slice(1, 3).join("-") || sku;
 
     if (rate) {
-      const price = calculatePrice(jpyPrice, rate);
+      const category = sku.startsWith("SEALED-") ? "sealed" : "singles";
+      const price = calculatePriceByCategory(jpyPrice, rate, category);
       await db
         .insert(cards)
         .values({
