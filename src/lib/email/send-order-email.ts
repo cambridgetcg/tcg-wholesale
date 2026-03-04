@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { orders, orderItems, cards, clients, notifications } from "@/lib/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, sql } from "drizzle-orm";
 import { resend, notificationFrom } from "./resend";
 import {
   quoteReady,
@@ -90,7 +90,7 @@ export async function sendOrderEmail(
           })
           .from(orderItems)
           .innerJoin(cards, eq(orderItems.cardId, cards.id))
-          .where(eq(orderItems.orderId, orderId));
+          .where(sql`${orderItems.orderId} = ${orderId} AND ${orderItems.removedAt} IS NULL`);
 
         const itemsData: OrderItemData[] = items.map((i) => ({
           cardNumber: i.cardNumber,

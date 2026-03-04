@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { orders, orderItems } from "@/lib/db/schema";
-import { eq, desc, count, sql } from "drizzle-orm";
+import { eq, desc, count, sql, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Nav from "@/components/Nav";
@@ -21,6 +21,7 @@ export default async function OrdersPage() {
       itemCount: count(orderItems.id).as("item_count"),
     })
     .from(orderItems)
+    .where(isNull(orderItems.removedAt))
     .groupBy(orderItems.orderId)
     .as("item_counts");
 

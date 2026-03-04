@@ -50,7 +50,7 @@ export default async function FulfillmentPage() {
     })
     .from(orderItems)
     .leftJoin(cards, eq(orderItems.cardId, cards.id))
-    .where(inArray(orderItems.orderId, orderIds));
+    .where(sql`${orderItems.orderId} IN (${sql.join(orderIds.map(id => sql`${id}`), sql`, `)}) AND ${orderItems.removedAt} IS NULL`);
 
   // Fulfilled aggregates per item
   const fulfilledAgg = await db

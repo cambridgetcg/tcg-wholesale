@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { orders, orderItems, cards, orderStatusHistory } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { captureItemsSnapshot } from "@/lib/order-snapshot";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -33,6 +34,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       unitPriceExVat: orderItems.unitPriceExVat,
       lineTotal: orderItems.lineTotal,
       stockStatus: orderItems.stockStatus,
+      removedAt: orderItems.removedAt,
     })
     .from(orderItems)
     .leftJoin(cards, eq(orderItems.cardId, cards.id))
@@ -50,13 +52,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const orderId = parseInt(id);
 
-  // Verify order exists and is in submitted status
+  // Verify order exists and is in submitted or quoted status
   const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
   if (!order) {
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
-  if (order.status !== "submitted") {
-    return NextResponse.json({ error: "Can only adjust items on submitted orders" }, { status: 400 });
+  if (order.status !== "submitted" && order.status !== "quoted") {
+    return NextResponse.json({ error: "Can only adjust items on submitted or quoted orders" }, { status: 400 });
   }
 
   const body = await req.json() as {
@@ -69,10 +71,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     adminNotes?: string;
   };
 
-  // Delete unavailable items
+  // Snapshot items BEFORE mutation for audit trail
+  const snapshot = await captureItemsSnapshot(orderId);
+
+  // Soft-delete unavailable items (preserve for audit trail)
   const unavailableIds = body.items.filter((i) => !i.available).map((i) => i.id);
   for (const itemId of unavailableIds) {
-    await db.delete(orderItems).where(eq(orderItems.id, itemId));
+    await db.update(orderItems)
+      .set({ removedAt: new Date() })
+      .where(eq(orderItems.id, itemId));
   }
 
   // Update available items with new prices/quantities, saving originals
@@ -93,18 +100,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .where(eq(orderItems.id, item.id));
   }
 
-  // Recalculate order total
+  // Recalculate order total (exclude soft-deleted items)
   const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
-  const total = allItems.reduce((sum, i) => sum + i.lineTotal, 0);
+  const total = allItems.filter((i) => !i.removedAt).reduce((sum, i) => sum + i.lineTotal, 0);
 
   // Set quoted timestamps
   const quotedAt = new Date();
   const quotedExpiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
 
+  const isNewQuote = order.status === "submitted";
+
   await db.update(orders)
     .set({
       totalExVat: Math.round(total * 100) / 100,
-      status: "quoted",
+      ...(isNewQuote ? { status: "quoted" } : {}),
       adminNotes: body.adminNotes || null,
       quotedAt,
       quotedExpiresAt,
@@ -112,14 +121,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     })
     .where(eq(orders.id, orderId));
 
-  // Record status change in audit log
+  // Record status change or update in audit log
   await db.insert(orderStatusHistory).values({
     orderId,
-    fromStatus: "submitted",
-    toStatus: "quoted",
+    fromStatus: order.status,
+    toStatus: isNewQuote ? "quoted" : order.status,
     changedBy: parseInt(session.user.id),
     changedAt: quotedAt,
-    note: `Quote sent: ${unavailableIds.length} items removed, ${availableItems.length} items quoted`,
+    note: isNewQuote
+      ? `Quote sent: ${unavailableIds.length} items removed, ${availableItems.length} items quoted`
+      : `Quote updated: ${availableItems.length} items adjusted`,
+    itemsSnapshot: snapshot,
   });
 
   const [updated] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);

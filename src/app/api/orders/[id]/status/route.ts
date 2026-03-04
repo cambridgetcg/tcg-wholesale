@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { sendOrderEmail } from "@/lib/email/send-order-email";
 import { isValidTransition, type OrderStatus } from "@/lib/order-transitions";
+import { captureItemsSnapshot } from "@/lib/order-snapshot";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -25,6 +26,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "Order not found" }, { status: 404 });
   }
 
+  // Snapshot items BEFORE mutation for audit trail
+  const snapshot = await captureItemsSnapshot(orderId);
+
   // Update line item prices if provided (for quote adjustments)
   if (body.items?.length) {
     for (const item of body.items) {
@@ -35,9 +39,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         .set({ unitPriceExVat: item.unitPriceExVat, lineTotal })
         .where(eq(orderItems.id, item.id));
     }
-    // Recalculate order total from all items
+    // Recalculate order total from non-removed items
     const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
-    const total = allItems.reduce((sum, i) => sum + i.lineTotal, 0);
+    const total = allItems.filter((i) => !i.removedAt).reduce((sum, i) => sum + i.lineTotal, 0);
     await db.update(orders)
       .set({ totalExVat: Math.round(total * 100) / 100, updatedAt: new Date() })
       .where(eq(orders.id, orderId));
@@ -80,6 +84,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         toStatus,
         changedBy: parseInt(session.user.id),
         changedAt: now,
+        itemsSnapshot: snapshot,
       });
     } catch {
       // Audit log failure should not block status update

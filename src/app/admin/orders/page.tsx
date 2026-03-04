@@ -29,6 +29,7 @@ interface OrderItemRow {
   unitPriceExVat: number;
   lineTotal: number;
   stockStatus: string | null;
+  removedAt: string | null;
 }
 
 interface EditableItem {
@@ -52,7 +53,7 @@ const statusFilters = ["all", "submitted", "quoted", "confirmed", "paid", "order
 
 const nextAction: Record<string, { label: string; next: string } | null> = {
   submitted: null, // Handled by the quote editor now
-  quoted: { label: "Mark Confirmed", next: "confirmed" },
+  quoted: null, // Handled by the quote editor now
   confirmed: { label: "Mark Paid", next: "paid" },
   paid: { label: "Mark Ordered", next: "ordered" },
   ordered: { label: "Mark Shipped", next: "shipped" },
@@ -98,16 +99,16 @@ export default function AdminOrdersPage() {
       const notifData: NotificationRow[] = await notifRes.json();
       setNotifs((prev) => ({ ...prev, [orderId]: notifData }));
 
-      // Initialize editable state for submitted orders
+      // Initialize editable state for submitted/quoted orders
       const order = orders.find((o) => o.id === orderId);
-      if (order?.status === "submitted" && !editItems[orderId]) {
+      if ((order?.status === "submitted" || order?.status === "quoted") && !editItems[orderId]) {
         setEditItems((prev) => ({
           ...prev,
           [orderId]: data.map((item) => ({
             id: item.id,
             unitPriceExVat: item.unitPriceExVat,
             quantity: item.quantity,
-            available: true,
+            available: !item.removedAt,
           })),
         }));
       }
@@ -134,6 +135,7 @@ export default function AdminOrdersPage() {
   async function sendQuote(orderId: number) {
     const edits = editItems[orderId];
     if (!edits) return;
+    const order = orders.find((o) => o.id === orderId);
     setSending(true);
     try {
       await fetch(`/api/orders/${orderId}/items`, {
@@ -146,7 +148,34 @@ export default function AdminOrdersPage() {
       });
       // Refresh orders and clear edit state
       setOrders((prev) => prev.map((o) =>
-        o.id === orderId ? { ...o, status: "quoted", totalExVat: getEditTotal(orderId) } : o
+        o.id === orderId ? { ...o, status: order?.status === "submitted" ? "quoted" : o.status, totalExVat: getEditTotal(orderId) } : o
+      ));
+      setEditItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
+      setItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
+      setExpandedId(null);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function confirmOrder(orderId: number) {
+    const edits = editItems[orderId];
+    if (!edits) return;
+    setSending(true);
+    try {
+      // Save edits + transition to confirmed via status endpoint
+      const availableEdits = edits.filter((e) => e.available);
+      await fetch(`/api/orders/${orderId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "confirmed",
+          items: availableEdits.map((e) => ({ id: e.id, unitPriceExVat: e.unitPriceExVat })),
+        }),
+      });
+      // Update local state
+      setOrders((prev) => prev.map((o) =>
+        o.id === orderId ? { ...o, status: "confirmed", totalExVat: getEditTotal(orderId) } : o
       ));
       setEditItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
       setItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
@@ -265,13 +294,15 @@ export default function AdminOrdersPage() {
                     <td colSpan={7} className="bg-[#0e0e16] px-4 md:px-8 py-4">
                       {!items[order.id] ? (
                         <span className="text-gray-500">Loading items...</span>
-                      ) : order.status === "submitted" && editItems[order.id] ? (
+                      ) : (order.status === "submitted" || order.status === "quoted") && editItems[order.id] ? (
                         /* ── Editable quote view for submitted orders ── */
                         <div className="space-y-4">
                           <div className="flex items-center justify-between">
-                            <h3 className="text-sm font-semibold text-gray-300">Adjust Quote</h3>
+                            <h3 className="text-sm font-semibold text-gray-300">
+                              {order.status === "quoted" ? "Edit Quote" : "Adjust Quote"}
+                            </h3>
                             <span className="text-xs text-gray-500">
-                              Edit prices and quantities, uncheck unavailable items
+                              Edit prices and quantities{order.status === "submitted" ? ", uncheck unavailable items" : ""}
                             </span>
                           </div>
 
@@ -371,15 +402,34 @@ export default function AdminOrdersPage() {
                             />
                           </div>
 
-                          {/* Send Quote button */}
-                          <div className="flex justify-end">
-                            <button
-                              onClick={() => sendQuote(order.id)}
-                              disabled={sending || editItems[order.id].every((e) => !e.available)}
-                              className="rounded bg-brand-600 px-4 py-2 text-sm font-medium hover:bg-brand-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {sending ? "Sending..." : "Send Quote"}
-                            </button>
+                          {/* Action buttons */}
+                          <div className="flex justify-end gap-2">
+                            {order.status === "quoted" ? (
+                              <>
+                                <button
+                                  onClick={() => sendQuote(order.id)}
+                                  disabled={sending || editItems[order.id].every((e) => !e.available)}
+                                  className="rounded bg-gray-700 px-4 py-2 text-sm font-medium hover:bg-gray-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {sending ? "Updating..." : "Update Quote"}
+                                </button>
+                                <button
+                                  onClick={() => confirmOrder(order.id)}
+                                  disabled={sending || editItems[order.id].every((e) => !e.available)}
+                                  className="rounded bg-green-700 px-4 py-2 text-sm font-medium hover:bg-green-600 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                  {sending ? "Confirming..." : "Confirm Order"}
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => sendQuote(order.id)}
+                                disabled={sending || editItems[order.id].every((e) => !e.available)}
+                                className="rounded bg-brand-600 px-4 py-2 text-sm font-medium hover:bg-brand-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {sending ? "Sending..." : "Send Quote"}
+                              </button>
+                            )}
                           </div>
                         </div>
                       ) : (
@@ -388,13 +438,19 @@ export default function AdminOrdersPage() {
                         {/* Stock status summary for quoted+ orders */}
                         {(() => {
                           const orderItems = items[order.id];
-                          const outOfStock = orderItems.filter((i) => i.stockStatus === "out_of_stock");
-                          const partial = orderItems.filter((i) => i.stockStatus === "partial");
-                          const priceChanged = orderItems.filter((i) => i.stockStatus === "price_changed");
-                          const hasIssues = outOfStock.length > 0 || partial.length > 0 || priceChanged.length > 0;
+                          const removed = orderItems.filter((i) => !!i.removedAt);
+                          const outOfStock = orderItems.filter((i) => !i.removedAt && i.stockStatus === "out_of_stock");
+                          const partial = orderItems.filter((i) => !i.removedAt && i.stockStatus === "partial");
+                          const priceChanged = orderItems.filter((i) => !i.removedAt && i.stockStatus === "price_changed");
+                          const hasIssues = removed.length > 0 || outOfStock.length > 0 || partial.length > 0 || priceChanged.length > 0;
                           if (!hasIssues) return null;
                           return (
                             <div className="flex flex-wrap gap-2 text-xs">
+                              {removed.length > 0 && (
+                                <span className="rounded-full bg-gray-800 px-2 py-0.5 text-gray-400 font-medium">
+                                  {removed.length} removed
+                                </span>
+                              )}
                               {outOfStock.length > 0 && (
                                 <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-red-400 font-medium">
                                   {outOfStock.length} out of stock
@@ -428,25 +484,29 @@ export default function AdminOrdersPage() {
                           </thead>
                           <tbody>
                             {items[order.id].map((item) => {
+                              const isRemoved = !!item.removedAt;
                               const statusColor =
+                                isRemoved ? "text-gray-600" :
                                 item.stockStatus === "out_of_stock" ? "text-red-400" :
                                 item.stockStatus === "partial" ? "text-orange-400" :
                                 item.stockStatus === "price_changed" ? "text-amber-400" :
                                 item.stockStatus === "in_stock" ? "text-green-500" :
                                 "text-gray-600";
                               const statusLabel =
+                                isRemoved ? "Removed" :
                                 item.stockStatus === "out_of_stock" ? "Out of stock" :
                                 item.stockStatus === "partial" ? "Partial" :
                                 item.stockStatus === "price_changed" ? "Price changed" :
                                 item.stockStatus === "in_stock" ? "In stock" :
                                 item.stockStatus ?? "—";
                               const rowBg =
+                                isRemoved ? "bg-gray-900/20" :
                                 item.stockStatus === "out_of_stock" ? "bg-red-900/10" :
                                 item.stockStatus === "partial" ? "bg-orange-900/10" :
                                 item.stockStatus === "price_changed" ? "bg-amber-900/10" :
                                 "";
                               return (
-                              <tr key={item.id} className={`border-t border-[#1e1e2e] ${rowBg}`}>
+                              <tr key={item.id} className={`border-t border-[#1e1e2e] ${rowBg} ${isRemoved ? "opacity-40 line-through" : ""}`}>
                                 <td className="py-1">
                                   {item.imageUrl ? (
                                     <img src={item.imageUrl} alt={item.cardNumber} className="h-8 w-auto rounded" loading="lazy" />

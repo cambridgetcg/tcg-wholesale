@@ -38,7 +38,7 @@ export default async function StockCheckPage({ params }: { params: Promise<{ id:
     })
     .from(orderItems)
     .leftJoin(cards, eq(orderItems.cardId, cards.id))
-    .where(eq(orderItems.orderId, orderId));
+    .where(sql`${orderItems.orderId} = ${orderId} AND ${orderItems.removedAt} IS NULL`);
 
   // Calculate price discrepancies
   const itemsWithDiscrepancy = items.map((item) => {

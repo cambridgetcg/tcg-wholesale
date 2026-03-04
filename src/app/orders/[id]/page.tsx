@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { orders, orderItems, cards } from "@/lib/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, isNull } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Nav from "@/components/Nav";
@@ -36,7 +36,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     })
     .from(orderItems)
     .leftJoin(cards, eq(orderItems.cardId, cards.id))
-    .where(eq(orderItems.orderId, orderId));
+    .where(sql`${orderItems.orderId} = ${orderId} AND ${orderItems.removedAt} IS NULL`);
 
   const isCancelled = order.status === "cancelled";
   const currentIdx = isCancelled ? -1 : statusSteps.indexOf(order.status);

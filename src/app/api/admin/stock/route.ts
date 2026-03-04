@@ -27,7 +27,7 @@ export async function GET() {
         oi.card_id,
         SUM(fe.fulfilled_qty) AS qty_fulfilled
       FROM fulfillment_entries fe
-      JOIN order_items oi ON oi.id = fe.order_item_id
+      JOIN order_items oi ON oi.id = fe.order_item_id AND oi.removed_at IS NULL
       GROUP BY oi.card_id
     )
     SELECT

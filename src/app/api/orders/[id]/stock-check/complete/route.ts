@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { orderItems, orders, cards, orderStatusHistory } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { calculatePriceByCategory } from "@/lib/pricing";
 import { sendOrderEmail } from "@/lib/email/send-order-email";
+import { captureItemsSnapshot } from "@/lib/order-snapshot";
 
 export async function POST(
   req: NextRequest,
@@ -39,7 +40,7 @@ export async function POST(
       checkedQuantity: orderItems.checkedQuantity,
     })
     .from(orderItems)
-    .where(eq(orderItems.orderId, orderId));
+    .where(sql`${orderItems.orderId} = ${orderId} AND ${orderItems.removedAt} IS NULL`);
 
   // Verify all items have been checked
   const unchecked = items.filter((i) => i.stockStatus === "pending");
@@ -47,13 +48,16 @@ export async function POST(
     return NextResponse.json({ error: `${unchecked.length} item(s) not yet checked` }, { status: 400 });
   }
 
+  // Snapshot items BEFORE mutation for audit trail
+  const snapshot = await captureItemsSnapshot(orderId);
+
   let removedCount = 0;
   let updatedCount = 0;
 
-  // Remove out-of-stock items
+  // Soft-delete out-of-stock items
   const outOfStock = items.filter((i) => i.stockStatus === "out_of_stock");
   for (const item of outOfStock) {
-    await db.delete(orderItems).where(eq(orderItems.id, item.id));
+    await db.update(orderItems).set({ removedAt: new Date() }).where(eq(orderItems.id, item.id));
     removedCount++;
   }
 
@@ -114,9 +118,9 @@ export async function POST(
     partialCount++;
   }
 
-  // Recalculate order total from remaining items
+  // Recalculate order total from remaining (non-removed) items
   const remaining = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
-  const newTotal = Math.round(remaining.reduce((sum, i) => sum + i.lineTotal, 0) * 100) / 100;
+  const newTotal = Math.round(remaining.filter((i) => !i.removedAt).reduce((sum, i) => sum + i.lineTotal, 0) * 100) / 100;
 
   const now = new Date();
   const quotedExpiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
@@ -140,6 +144,7 @@ export async function POST(
     changedBy: parseInt(session.user.id),
     changedAt: now,
     note: `Stock check complete: ${removedCount} removed, ${updatedCount} price updated, ${partialCount} partial`,
+    itemsSnapshot: snapshot,
   });
 
   // Send quote ready email to client

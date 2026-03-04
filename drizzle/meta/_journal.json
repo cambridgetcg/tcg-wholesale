@@ -15,6 +15,20 @@
       "when": 1772453541420,
       "tag": "0001_workable_kitty_pryde",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772633866833,
+      "tag": "0002_foamy_the_fallen",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1772635482658,
+      "tag": "0003_nice_killraven",
+      "breakpoints": true
     }
   ]
 }

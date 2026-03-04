@@ -10,6 +10,7 @@ import {
   uniqueIndex,
   index,
   customType,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 // Custom numeric(10,2) that auto-parses to JS number (Postgres numeric returns strings)
@@ -115,6 +116,7 @@ export const orderItems = pgTable("order_items", {
   checkedPriceJpy: integer("checked_price_jpy"),
   checkedQuantity: integer("checked_quantity"),
   remamboSubmittedAt: timestamp("remambo_submitted_at"),
+  removedAt: timestamp("removed_at"),
 });
 
 export const priceHistory = pgTable("price_history", {
@@ -164,6 +166,7 @@ export const orderStatusHistory = pgTable("order_status_history", {
   changedBy: integer("changed_by").references(() => clients.id),
   changedAt: timestamp("changed_at").defaultNow(),
   note: text("note"),
+  itemsSnapshot: jsonb("items_snapshot"),
 }, (table) => ({
   orderIdx: index("order_status_history_order_idx").on(table.orderId),
 }));
