@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import CardThumbnail from "@/components/CardThumbnail";
+
+interface LiveResult {
+  priceJpy: number;
+  stock: number;
+}
 
 interface StockItem {
   id: number;
@@ -56,6 +61,11 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
     return inputs;
   });
 
+  const [liveResults, setLiveResults] = useState<Record<number, LiveResult>>({});
+  const [checkingAll, setCheckingAll] = useState(false);
+  const [checkingItem, setCheckingItem] = useState<number | null>(null);
+  const [checkProgress, setCheckProgress] = useState({ done: 0, total: 0 });
+
   const checkedCount = items.filter((i) => i.stockStatus !== "pending").length;
   const allChecked = checkedCount === items.length;
 
@@ -101,6 +111,94 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
     }
   }
 
+  async function applyLiveResult(item: StockItem, result: LiveResult) {
+    setLiveResults((prev) => ({ ...prev, [item.id]: result }));
+    const dbPrice = item.cardrushJpy ?? 0;
+
+    if (result.stock === 0) {
+      // Out of stock — auto-mark
+      await updateItemStatus(item.id, "out_of_stock");
+    } else if (result.stock > 0 && result.priceJpy === dbPrice) {
+      // In stock, price matches — auto-mark
+      await updateItemStatus(item.id, "in_stock");
+    } else if (result.stock > 0 && result.stock < item.quantity) {
+      // Partial stock — pre-fill qty input, don't auto-submit
+      setQtyInputs((prev) => ({ ...prev, [item.id]: result.stock.toString() }));
+      if (result.priceJpy !== dbPrice && result.priceJpy > 0) {
+        setPriceInputs((prev) => ({ ...prev, [item.id]: result.priceJpy.toString() }));
+      }
+    } else if (result.stock > 0 && result.priceJpy !== dbPrice && result.priceJpy > 0) {
+      // Price changed — pre-fill price input, don't auto-submit
+      setPriceInputs((prev) => ({ ...prev, [item.id]: result.priceJpy.toString() }));
+    }
+  }
+
+  const checkSingleItem = useCallback(async (item: StockItem) => {
+    if (!item.cardrushUrl) return;
+    setCheckingItem(item.id);
+    setError(null);
+    try {
+      const res = await fetch("/api/admin/stock-check/live", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ urls: [item.cardrushUrl] }),
+      });
+      if (!res.ok) throw new Error("Failed to check stock");
+      const data = await res.json();
+      const result = data.results[item.cardrushUrl];
+      if (result && !result.error) {
+        await applyLiveResult(item, result);
+      } else {
+        setError(`Check failed for ${item.cardNumber}: ${result?.error ?? "Unknown error"}`);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Check failed");
+    } finally {
+      setCheckingItem(null);
+    }
+  }, []);
+
+  const checkAllItems = useCallback(async () => {
+    const unchecked = items.filter((i) => i.stockStatus === "pending" && i.cardrushUrl);
+    if (unchecked.length === 0) return;
+
+    setCheckingAll(true);
+    setCheckProgress({ done: 0, total: unchecked.length });
+    setError(null);
+
+    const BATCH_SIZE = 20;
+    let done = 0;
+
+    for (let i = 0; i < unchecked.length; i += BATCH_SIZE) {
+      const batch = unchecked.slice(i, i + BATCH_SIZE);
+      const urls = batch.map((item) => item.cardrushUrl!);
+
+      try {
+        const res = await fetch("/api/admin/stock-check/live", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ urls }),
+        });
+        if (!res.ok) throw new Error("Batch check failed");
+        const data = await res.json();
+
+        for (const item of batch) {
+          const result = data.results[item.cardrushUrl!];
+          if (result && !result.error) {
+            await applyLiveResult(item, result);
+          }
+          done++;
+          setCheckProgress({ done, total: unchecked.length });
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Batch check failed");
+        break;
+      }
+    }
+
+    setCheckingAll(false);
+  }, [items]);
+
   function statusClasses(itemStatus: string, buttonStatus: string) {
     const active = itemStatus === buttonStatus;
     const base = "rounded px-3 py-1 text-xs font-medium transition";
@@ -139,12 +237,23 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
             {clientName}{clientCompany ? ` (${clientCompany})` : ""} — £{orderTotal.toFixed(2)} ex-VAT
           </p>
         </div>
-        <Link
-          href="/admin/orders"
-          className="rounded bg-gray-800 px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition"
-        >
-          Back to Orders
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={checkAllItems}
+            disabled={checkingAll || items.filter((i) => i.stockStatus === "pending" && i.cardrushUrl).length === 0}
+            className="rounded bg-brand-600 px-4 py-2 text-sm font-medium hover:bg-brand-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {checkingAll
+              ? `Checking ${checkProgress.done}/${checkProgress.total}...`
+              : "Check All"}
+          </button>
+          <Link
+            href="/admin/orders"
+            className="rounded bg-gray-800 px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition"
+          >
+            Back to Orders
+          </Link>
+        </div>
       </div>
 
       {/* Progress */}
@@ -212,16 +321,26 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
                 </div>
               </div>
 
-              {/* CardRush link */}
+              {/* Live check + CardRush link */}
               {item.cardrushUrl && (
-                <a
-                  href={item.cardrushUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 rounded bg-blue-900/30 px-3 py-1 text-xs font-medium text-blue-400 hover:bg-blue-900/50 transition"
-                >
-                  Check Stock ↗
-                </a>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => checkSingleItem(item)}
+                    disabled={checkingItem === item.id || checkingAll}
+                    className="rounded bg-blue-900/30 px-3 py-1 text-xs font-medium text-blue-400 hover:bg-blue-900/50 transition disabled:opacity-50"
+                  >
+                    {checkingItem === item.id ? "..." : "Check"}
+                  </button>
+                  <a
+                    href={item.cardrushUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded px-1.5 py-1 text-xs text-gray-500 hover:text-blue-400 transition"
+                    title="Open on CardRush"
+                  >
+                    ↗
+                  </a>
+                </div>
               )}
             </div>
 
@@ -229,6 +348,24 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
             {item.priceDiffPct != null && (
               <div className="mt-2 rounded bg-amber-900/20 border border-amber-900/30 px-3 py-2 text-xs text-amber-400">
                 Price may have changed since last sync — current calc: £{item.currentCalcPrice?.toFixed(2)} vs order: £{item.unitPriceExVat.toFixed(2)} ({(item.priceDiffPct * 100).toFixed(1)}% diff)
+              </div>
+            )}
+
+            {/* Live stock results */}
+            {liveResults[item.id] && (
+              <div className="mt-2 flex items-center gap-3 text-xs">
+                {liveResults[item.id].stock > 0 ? (
+                  <span className="text-green-400">{liveResults[item.id].stock} in stock</span>
+                ) : (
+                  <span className="text-red-400">Out of stock</span>
+                )}
+                {liveResults[item.id].priceJpy === (item.cardrushJpy ?? 0) ? (
+                  <span className="text-green-400">¥{liveResults[item.id].priceJpy.toLocaleString()} ✓</span>
+                ) : liveResults[item.id].priceJpy > 0 ? (
+                  <span className="text-amber-400">
+                    ¥{(item.cardrushJpy ?? 0).toLocaleString()} → ¥{liveResults[item.id].priceJpy.toLocaleString()}
+                  </span>
+                ) : null}
               </div>
             )}
 

@@ -142,6 +142,40 @@ function extractProduct(
   };
 }
 
+export interface LiveStockResult {
+  priceJpy: number;
+  stock: number;
+}
+
+/**
+ * Parse a single CardRush product detail page (e.g. /product/7164)
+ * for live price and stock count.
+ */
+export function parseProductPage(html: string): LiveStockResult {
+  const $ = cheerio.load(html);
+
+  // Price: selling price element, same pattern as group pages
+  const priceText = $(".selling_price .figure").text();
+  const priceMatch = priceText.match(PRICE_RE);
+  const priceJpy = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ""), 10) : 0;
+
+  // Stock: "在庫数 63枚" or "在庫なし"
+  const stockText = $(".stock").text();
+  const stockMatch = stockText.match(STOCK_RE);
+  let stock: number;
+  if (stockMatch) {
+    stock = parseInt(stockMatch[1], 10);
+  } else if (stockText.includes("在庫なし")) {
+    stock = 0;
+  } else {
+    // Fallback: check inline JS for pConf.maxQuantity
+    const scriptMatch = html.match(/pConf\.maxQuantity\s*=\s*(\d+)/);
+    stock = scriptMatch ? parseInt(scriptMatch[1], 10) : 0;
+  }
+
+  return { priceJpy, stock };
+}
+
 export function isGraded(product: RawProduct): boolean {
   return (
     GRADED_INDICATORS.some((g) => (product.condition ?? "").toUpperCase().includes(g)) ||

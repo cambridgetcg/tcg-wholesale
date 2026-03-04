@@ -21,7 +21,7 @@ function isCloudFlareBlock(status: number): boolean {
   return status === 403 || status === 503;
 }
 
-async function fetchWithRetry(url: string): Promise<string> {
+export async function fetchWithRetry(url: string): Promise<string> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
