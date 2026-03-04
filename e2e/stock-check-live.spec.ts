@@ -1,156 +1,143 @@
 import { test, expect } from "@playwright/test";
-import { adminLogin, BASE } from "./helpers";
+import { adminLogin } from "./helpers";
 
 /**
- * E2E: Live stock check on order 33 (first 10 pending items)
+ * E2E: Live stock check on order 33
  *
  * 1. Admin logs in
  * 2. Opens stock check for order 33
  * 3. Clicks "Check All" to trigger live stock check
- * 4. Verifies live results appear (stock count + price)
- * 5. Verifies items auto-transition from pending
+ * 4. Waits for progress to advance (not full completion — too many items)
+ * 5. Verifies live results appear and items auto-transition
  */
 
 const ORDER_ID = 33;
+const ADMIN_BASE = "https://admin.wholesaletcgdirect.com";
 
 test.describe("Live stock check — Order 33", () => {
-  test("Check All auto-processes first batch of pending items", async ({
+  test("Check All auto-processes items and shows live results", async ({
     page,
   }) => {
-    // Increase timeout — live fetches take ~2s per item
     test.setTimeout(180_000);
 
     await adminLogin(page);
 
-    // Navigate to stock check page
-    await page.goto(`/admin/orders/${ORDER_ID}/stock-check`);
+    await page.goto(`${ADMIN_BASE}/admin/orders/${ORDER_ID}/stock-check`);
     await expect(
       page.locator("h1", { hasText: "Stock Check" }),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Count pending items before
+    // Read progress before
     const progressText = await page
       .locator("text=/\\d+\\/\\d+ items checked/")
       .textContent();
-    console.log(`Before: ${progressText}`);
-
     const match = progressText?.match(/(\d+)\/(\d+)/);
     const checkedBefore = match ? parseInt(match[1]) : 0;
     const total = match ? parseInt(match[2]) : 0;
-    console.log(`Checked: ${checkedBefore}/${total}`);
+    console.log(`Before: ${checkedBefore}/${total}`);
 
-    // Find Check All button and click it
+    // Click Check All
     const checkAllBtn = page.locator('button:has-text("Check All")');
-    await expect(checkAllBtn).toBeVisible();
     await expect(checkAllBtn).toBeEnabled();
     await checkAllBtn.click();
 
-    // Button should show progress text
+    // Progress counter should appear on button
     await expect(
       page.locator("button", { hasText: /Checking \d+\// }),
     ).toBeVisible({ timeout: 10_000 });
     console.log("Check All started — progress visible");
 
-    // Wait for Check All to complete (button returns to "Check All")
-    // Each item takes ~2-3s, batch of 20 takes ~60s on the API side
-    await expect(checkAllBtn).toHaveText("Check All", { timeout: 120_000 });
-    console.log("Check All completed");
+    // Wait for at least some stock indicators to appear (first batch results)
+    await expect(page.locator("text=/\\d+ in stock/").first()).toBeVisible({
+      timeout: 120_000,
+    });
+    console.log("First live results appeared");
 
-    // Verify live results appeared — look for "in stock" indicators
-    const stockIndicators = page.locator("text=/\\d+ in stock/");
-    const stockCount = await stockIndicators.count();
-    console.log(`Live stock indicators visible: ${stockCount}`);
-    expect(stockCount).toBeGreaterThan(0);
+    // Wait for progress to advance by at least 10 items
+    await expect(async () => {
+      const text = await page
+        .locator("text=/\\d+\\/\\d+ items checked/")
+        .textContent();
+      const m = text?.match(/(\d+)\/(\d+)/);
+      const now = m ? parseInt(m[1]) : 0;
+      expect(now).toBeGreaterThanOrEqual(checkedBefore + 10);
+    }).toPass({ timeout: 120_000 });
 
-    // Verify some items were auto-marked (green border = in_stock)
-    const greenItems = page.locator(".space-y-3 > div.border-green-900\\/50");
-    // Wait a moment for state to settle
-    await page.waitForTimeout(2000);
-    const greenCount = await greenItems.count();
-    console.log(`Items marked in_stock (green): ${greenCount}`);
-
-    // Check progress updated
-    const newProgress = await page
+    // Read final progress
+    const afterText = await page
       .locator("text=/\\d+\\/\\d+ items checked/")
       .textContent();
-    console.log(`After: ${newProgress}`);
-    const newMatch = newProgress?.match(/(\d+)\/(\d+)/);
-    const checkedAfter = newMatch ? parseInt(newMatch[1]) : 0;
-    expect(checkedAfter).toBeGreaterThan(checkedBefore);
+    const afterMatch = afterText?.match(/(\d+)\/(\d+)/);
+    const checkedAfter = afterMatch ? parseInt(afterMatch[1]) : 0;
     console.log(
-      `Progress: ${checkedBefore} → ${checkedAfter} (+${checkedAfter - checkedBefore} items)`,
+      `After: ${checkedAfter}/${total} (+${checkedAfter - checkedBefore})`,
     );
 
-    // Verify price indicators appeared (✓ for matching prices)
-    const priceMatch = page.locator("text=/¥[\\d,]+ ✓/");
-    const priceMatchCount = await priceMatch.count();
-    console.log(`Price match indicators (✓): ${priceMatchCount}`);
-
-    // Verify out-of-stock indicators if any
-    const oosIndicators = page.locator(
-      ".space-y-3 > div.border-red-900\\/50",
+    // Verify live result indicators
+    const stockCount = await page.locator("text=/\\d+ in stock/").count();
+    const priceOkCount = await page.locator("text=/¥[\\d,]+ ✓/").count();
+    console.log(
+      `Stock indicators: ${stockCount}, Price match (✓): ${priceOkCount}`,
     );
-    const oosCount = await oosIndicators.count();
-    console.log(`Items marked out_of_stock (red): ${oosCount}`);
+    expect(stockCount).toBeGreaterThan(0);
 
-    // Screenshot for visual verification
+    // Screenshot
     await page.screenshot({
-      path: "test-results/stock-check-after.png",
+      path: "test-results/stock-check-live.png",
       fullPage: true,
     });
-    console.log("Screenshot saved to test-results/stock-check-after.png");
+    console.log("Screenshot saved");
   });
 
-  test("Per-item Check button works", async ({ page }) => {
+  test("Per-item Check button works on a single item", async ({ page }) => {
     test.setTimeout(60_000);
 
     await adminLogin(page);
-    await page.goto(`/admin/orders/${ORDER_ID}/stock-check`);
+    await page.goto(`${ADMIN_BASE}/admin/orders/${ORDER_ID}/stock-check`);
     await expect(
       page.locator("h1", { hasText: "Stock Check" }),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Find the first pending item with a Check button
-    const pendingItems = page.locator(
-      '.space-y-3 > div.border-\\[\\#1e1e2e\\]',
-    );
-    const pendingCount = await pendingItems.count();
+    // Find a pending item by its dark border
+    const allItems = page.locator(".space-y-3 > div");
+    const itemCount = await allItems.count();
+    let targetIdx = -1;
+    for (let i = 0; i < itemCount; i++) {
+      const cls = (await allItems.nth(i).getAttribute("class")) ?? "";
+      if (cls.includes("border-[#1e1e2e]")) {
+        targetIdx = i;
+        break;
+      }
+    }
 
-    if (pendingCount === 0) {
+    if (targetIdx === -1) {
       console.log("No pending items left — skipping per-item test");
       return;
     }
 
-    const firstPending = pendingItems.first();
-    const checkBtn = firstPending.locator('button:has-text("Check")').first();
-    await expect(checkBtn).toBeVisible();
+    // Use nth() locator which is stable even if class changes
+    const targetItem = allItems.nth(targetIdx);
+    const cardNum = await targetItem.locator(".font-mono").textContent();
+    console.log(`Checking single item [${targetIdx}]: ${cardNum}`);
 
-    // Get card number for logging
-    const cardNum = await firstPending.locator(".font-mono").textContent();
-    console.log(`Checking single item: ${cardNum}`);
-
-    // Click Check
+    const checkBtn = targetItem.locator('button:has-text("Check")').first();
     await checkBtn.click();
 
-    // Should show loading state
+    // Wait for result text to appear on this item
     await expect(
-      firstPending.locator('button:has-text("...")'),
-    ).toBeVisible({ timeout: 5_000 });
-
-    // Wait for result — either stock indicator or status change
-    await expect(
-      firstPending.locator("text=/\\d+ in stock|Out of stock/"),
+      targetItem.locator("text=/\\d+ in stock|Out of stock/"),
     ).toBeVisible({ timeout: 30_000 });
 
-    const resultText = await firstPending
+    const resultText = await targetItem
       .locator("text=/\\d+ in stock|Out of stock/")
       .textContent();
     console.log(`Result for ${cardNum}: ${resultText}`);
 
-    // Item should no longer be pending (border changed)
-    await expect(firstPending).not.toHaveClass(/border-\[#1e1e2e\]/, {
-      timeout: 10_000,
-    });
-    console.log(`${cardNum} status updated from pending`);
+    // Verify the item is no longer pending (green or red border)
+    const cls = (await targetItem.getAttribute("class")) ?? "";
+    const transitioned =
+      cls.includes("border-green") || cls.includes("border-red");
+    expect(transitioned).toBe(true);
+    console.log(`${cardNum} transitioned from pending`);
   });
 });
