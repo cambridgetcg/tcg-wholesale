@@ -65,9 +65,17 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
   const [checkingAll, setCheckingAll] = useState(false);
   const [checkingItem, setCheckingItem] = useState<number | null>(null);
   const [checkProgress, setCheckProgress] = useState({ done: 0, total: 0 });
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const checkedCount = items.filter((i) => i.stockStatus !== "pending").length;
   const allChecked = checkedCount === items.length;
+
+  const statusCounts = items.reduce<Record<string, number>>((acc, i) => {
+    acc[i.stockStatus] = (acc[i.stockStatus] || 0) + 1;
+    return acc;
+  }, {});
+
+  const filteredItems = statusFilter ? items.filter((i) => i.stockStatus === statusFilter) : items;
 
   async function updateItemStatus(itemId: number, stockStatus: string, checkedPriceJpy?: number, checkedQuantity?: number) {
     setSaving(itemId);
@@ -274,6 +282,82 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
         </div>
       </div>
 
+      {/* Status filter */}
+      {checkedCount > 0 && (
+        <div className="mb-4 flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setStatusFilter(null)}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+              statusFilter === null
+                ? "bg-gray-600 text-white"
+                : "bg-gray-800/50 text-gray-400 hover:bg-gray-800"
+            }`}
+          >
+            All ({items.length})
+          </button>
+          {(statusCounts.in_stock ?? 0) > 0 && (
+            <button
+              onClick={() => setStatusFilter(statusFilter === "in_stock" ? null : "in_stock")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                statusFilter === "in_stock"
+                  ? "bg-green-600 text-white"
+                  : "bg-green-900/20 text-green-400 hover:bg-green-900/40"
+              }`}
+            >
+              In Stock ({statusCounts.in_stock})
+            </button>
+          )}
+          {(statusCounts.out_of_stock ?? 0) > 0 && (
+            <button
+              onClick={() => setStatusFilter(statusFilter === "out_of_stock" ? null : "out_of_stock")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                statusFilter === "out_of_stock"
+                  ? "bg-red-600 text-white"
+                  : "bg-red-900/20 text-red-400 hover:bg-red-900/40"
+              }`}
+            >
+              Out of Stock ({statusCounts.out_of_stock})
+            </button>
+          )}
+          {(statusCounts.price_changed ?? 0) > 0 && (
+            <button
+              onClick={() => setStatusFilter(statusFilter === "price_changed" ? null : "price_changed")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                statusFilter === "price_changed"
+                  ? "bg-amber-600 text-white"
+                  : "bg-amber-900/20 text-amber-400 hover:bg-amber-900/40"
+              }`}
+            >
+              Price Changed ({statusCounts.price_changed})
+            </button>
+          )}
+          {(statusCounts.partial ?? 0) > 0 && (
+            <button
+              onClick={() => setStatusFilter(statusFilter === "partial" ? null : "partial")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                statusFilter === "partial"
+                  ? "bg-orange-600 text-white"
+                  : "bg-orange-900/20 text-orange-400 hover:bg-orange-900/40"
+              }`}
+            >
+              Partial ({statusCounts.partial})
+            </button>
+          )}
+          {(statusCounts.pending ?? 0) > 0 && (
+            <button
+              onClick={() => setStatusFilter(statusFilter === "pending" ? null : "pending")}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                statusFilter === "pending"
+                  ? "bg-gray-600 text-white"
+                  : "bg-gray-800/50 text-gray-400 hover:bg-gray-800"
+              }`}
+            >
+              Pending ({statusCounts.pending})
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Error banner */}
       {error && (
         <div className="mb-4 rounded-lg border border-red-900/50 bg-red-900/20 px-4 py-3 text-sm text-red-400">
@@ -283,7 +367,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
 
       {/* Items checklist */}
       <div className="space-y-3">
-        {items.map((item) => (
+        {filteredItems.map((item) => (
           <div
             key={item.id}
             className={`rounded-lg border p-4 transition ${
