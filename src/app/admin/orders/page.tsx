@@ -28,6 +28,7 @@ interface OrderItemRow {
   quantity: number;
   unitPriceExVat: number;
   lineTotal: number;
+  stockStatus: string | null;
 }
 
 interface EditableItem {
@@ -383,6 +384,35 @@ export default function AdminOrdersPage() {
                         </div>
                       ) : (
                         /* ── Read-only items view for non-submitted orders ── */
+                        <div className="space-y-3">
+                        {/* Stock status summary for quoted+ orders */}
+                        {(() => {
+                          const orderItems = items[order.id];
+                          const outOfStock = orderItems.filter((i) => i.stockStatus === "out_of_stock");
+                          const partial = orderItems.filter((i) => i.stockStatus === "partial");
+                          const priceChanged = orderItems.filter((i) => i.stockStatus === "price_changed");
+                          const hasIssues = outOfStock.length > 0 || partial.length > 0 || priceChanged.length > 0;
+                          if (!hasIssues) return null;
+                          return (
+                            <div className="flex flex-wrap gap-2 text-xs">
+                              {outOfStock.length > 0 && (
+                                <span className="rounded-full bg-red-900/30 px-2 py-0.5 text-red-400 font-medium">
+                                  {outOfStock.length} out of stock
+                                </span>
+                              )}
+                              {partial.length > 0 && (
+                                <span className="rounded-full bg-orange-900/30 px-2 py-0.5 text-orange-400 font-medium">
+                                  {partial.length} partial
+                                </span>
+                              )}
+                              {priceChanged.length > 0 && (
+                                <span className="rounded-full bg-amber-900/30 px-2 py-0.5 text-amber-400 font-medium">
+                                  {priceChanged.length} price changed
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
@@ -392,12 +422,31 @@ export default function AdminOrdersPage() {
                               <th className="py-1 text-right">Unit Price</th>
                               <th className="py-1 text-right">Qty</th>
                               <th className="py-1 text-right">Line Total</th>
+                              <th className="py-1 text-left">Stock</th>
                               <th className="py-1 text-left">CardRush</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {items[order.id].map((item) => (
-                              <tr key={item.id} className="border-t border-[#1e1e2e]">
+                            {items[order.id].map((item) => {
+                              const statusColor =
+                                item.stockStatus === "out_of_stock" ? "text-red-400" :
+                                item.stockStatus === "partial" ? "text-orange-400" :
+                                item.stockStatus === "price_changed" ? "text-amber-400" :
+                                item.stockStatus === "in_stock" ? "text-green-500" :
+                                "text-gray-600";
+                              const statusLabel =
+                                item.stockStatus === "out_of_stock" ? "Out of stock" :
+                                item.stockStatus === "partial" ? "Partial" :
+                                item.stockStatus === "price_changed" ? "Price changed" :
+                                item.stockStatus === "in_stock" ? "In stock" :
+                                item.stockStatus ?? "—";
+                              const rowBg =
+                                item.stockStatus === "out_of_stock" ? "bg-red-900/10" :
+                                item.stockStatus === "partial" ? "bg-orange-900/10" :
+                                item.stockStatus === "price_changed" ? "bg-amber-900/10" :
+                                "";
+                              return (
+                              <tr key={item.id} className={`border-t border-[#1e1e2e] ${rowBg}`}>
                                 <td className="py-1">
                                   {item.imageUrl ? (
                                     <img src={item.imageUrl} alt={item.cardNumber} className="h-8 w-auto rounded" loading="lazy" />
@@ -409,6 +458,7 @@ export default function AdminOrdersPage() {
                                 <td className="py-1 text-right">&pound;{item.unitPriceExVat.toFixed(2)}</td>
                                 <td className="py-1 text-right">{item.quantity}</td>
                                 <td className="py-1 text-right font-medium">&pound;{item.lineTotal.toFixed(2)}</td>
+                                <td className={`py-1 text-left font-medium ${statusColor}`}>{statusLabel}</td>
                                 <td className="py-1 text-left">
                                   {item.cardrushUrl && (
                                     <a href={item.cardrushUrl} target="_blank" rel="noopener noreferrer"
@@ -418,9 +468,11 @@ export default function AdminOrdersPage() {
                                   )}
                                 </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                           </tbody>
                         </table>
+                        </div>
                         </div>
                       )}
 
