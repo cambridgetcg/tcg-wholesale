@@ -14,9 +14,10 @@ interface CardRow {
   name: string | null;
   setCode: string | null;
   setName: string | null;
-  priceExVat: number | null;
+  price: number | null;
   rarity: string | null;
   imageUrl: string | null;
+  stock: number;
 }
 
 export default function CardTable({
@@ -26,6 +27,7 @@ export default function CardTable({
   volumeDiscountPct,
   lastSynced,
   currentCategory = "singles",
+  wantedIds = [],
 }: {
   cards: CardRow[];
   currentSort: string;
@@ -33,6 +35,7 @@ export default function CardTable({
   volumeDiscountPct: number;
   lastSynced: string | null;
   currentCategory?: string;
+  wantedIds?: number[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -58,6 +61,34 @@ export default function CardTable({
 
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [expandedImage, setExpandedImage] = useState<{ url: string; alt: string } | null>(null);
+  const [wanted, setWanted] = useState<Set<number>>(() => new Set(wantedIds));
+  const [togglingWanted, setTogglingWanted] = useState<Set<number>>(new Set());
+
+  async function toggleWanted(cardId: number) {
+    setTogglingWanted((prev) => new Set(prev).add(cardId));
+    try {
+      const res = await fetch("/api/wanted", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardId }),
+      });
+      if (res.ok) {
+        const { wanted: isWanted } = await res.json();
+        setWanted((prev) => {
+          const next = new Set(prev);
+          if (isWanted) next.add(cardId);
+          else next.delete(cardId);
+          return next;
+        });
+      }
+    } finally {
+      setTogglingWanted((prev) => {
+        const next = new Set(prev);
+        next.delete(cardId);
+        return next;
+      });
+    }
+  }
 
   function handleAdd(card: CardRow) {
     const qty = quantities[card.id] || 1;
@@ -68,7 +99,7 @@ export default function CardTable({
       name: card.name ?? "",
       setCode: card.setCode,
       setName: card.setName,
-      priceExVat: card.priceExVat ?? 0,
+      price: card.price ?? 0,
     }, qty);
     setQuantities((prev) => ({ ...prev, [card.id]: 1 }));
   }
@@ -103,11 +134,12 @@ export default function CardTable({
               Set{sortIndicator("set")}
             </th>
             <th className="hidden md:table-cell px-4 py-3 font-medium">Type</th>
+            <th className="px-2 md:px-4 py-3 font-medium text-right">Stock</th>
             <th
               className="px-2 md:px-4 py-3 font-medium text-right cursor-pointer hover:text-gray-200 transition select-none"
               onClick={() => toggleSort("price")}
             >
-              Price (ex-VAT){sortIndicator("price")}
+              Price{sortIndicator("price")}
               {lastSynced && (
                 <div className="text-[10px] text-gray-500 font-normal">{lastSynced}</div>
               )}
@@ -117,7 +149,7 @@ export default function CardTable({
         </thead>
         <tbody className="divide-y divide-[#1e1e2e]">
           {cards.map((card) => {
-            const price = card.priceExVat ?? 0;
+            const price = card.price ?? 0;
             const discounted = volumeDiscountPct > 0
               ? applyVolumeDiscount(price, volumeDiscountPct)
               : price;
@@ -148,6 +180,9 @@ export default function CardTable({
                 <td className="hidden md:table-cell px-4 py-3 text-gray-400">{card.setCode}</td>
                 <td className="hidden md:table-cell px-4 py-3 text-gray-400 text-xs font-mono">
                   {card.rarity ?? "—"}
+                </td>
+                <td className={`px-2 md:px-4 py-3 text-right ${card.stock > 0 ? "text-green-400" : "text-gray-500"}`}>
+                  {card.stock}
                 </td>
                 <td className="px-2 md:px-4 py-3 text-right">
                   {volumeDiscountPct > 0 ? (
@@ -185,6 +220,18 @@ export default function CardTable({
                     >
                       Add
                     </button>
+                    <button
+                      onClick={() => toggleWanted(card.id)}
+                      disabled={togglingWanted.has(card.id)}
+                      className="p-1 transition disabled:opacity-50"
+                      title={wanted.has(card.id) ? "Remove from wanted" : "Mark as wanted"}
+                    >
+                      {wanted.has(card.id) ? (
+                        <svg className="w-4 h-4 text-pink-500 fill-current" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+                      ) : (
+                        <svg className="w-4 h-4 text-gray-500 hover:text-pink-400 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+                      )}
+                    </button>
                   </div>
                 </td>
               </tr>
@@ -192,7 +239,7 @@ export default function CardTable({
           })}
           {cards.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+              <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                 No cards found. Try adjusting your search or filters.
               </td>
             </tr>

@@ -69,7 +69,7 @@ export const cards = pgTable("cards", {
   cardrushJpy: integer("cardrush_jpy"),
   gbpJpyRate: real("gbp_jpy_rate"),
   baseGbp: money("base_gbp"),
-  priceExVat: money("price_ex_vat"),
+  price: money("price"),
   ebayItemNumber: text("ebay_item_number"),
   lastSyncedAt: timestamp("last_synced_at"),
   gameId: integer("game_id").references(() => games.id),
@@ -78,6 +78,7 @@ export const cards = pgTable("cards", {
   productType: text("product_type"),
   rarity: text("rarity"),
   imageUrl: text("image_url"),
+  stock: integer("stock").notNull().default(0),
 }, (table) => ({
   nameIdx: index("cards_name_idx").on(table.name),
   cardNumberIdx: index("cards_card_number_idx").on(table.cardNumber),
@@ -91,7 +92,7 @@ export const orders = pgTable("orders", {
   status: text("status", {
     enum: ["submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered", "cancelled"],
   }).notNull().default("submitted"),
-  totalExVat: money("total_ex_vat").notNull().default(0),
+  total: money("total").notNull().default(0),
   volumeDiscount: real("volume_discount").notNull().default(0),
   notes: text("notes"),
   adminNotes: text("admin_notes"),
@@ -107,7 +108,7 @@ export const orderItems = pgTable("order_items", {
   orderId: integer("order_id").notNull().references(() => orders.id),
   cardId: integer("card_id").notNull().references(() => cards.id),
   quantity: integer("quantity").notNull().default(1),
-  unitPriceExVat: money("unit_price_ex_vat").notNull(),
+  unitPrice: money("unit_price").notNull(),
   originalUnitPrice: money("original_unit_price"),
   lineTotal: money("line_total").notNull(),
   stockStatus: text("stock_status", {
@@ -151,7 +152,7 @@ export const priceArchive = pgTable("price_archive", {
   cardrushJpy: integer("cardrush_jpy").notNull(),
   gbpJpyRate: real("gbp_jpy_rate").notNull(),
   baseGbp: money("base_gbp").notNull(),
-  priceExVat: money("price_ex_vat").notNull(),
+  price: money("price").notNull(),
 }, (table) => ({
   cardDateUnique: uniqueIndex("price_archive_card_date_idx").on(table.cardId, table.snapshotDate),
   dateIdx: index("price_archive_date_idx").on(table.snapshotDate),
@@ -246,7 +247,7 @@ export const cartItems = pgTable("cart_items", {
   cardName: text("card_name").notNull().default(""),
   setCode: text("set_code"),
   setName: text("set_name"),
-  priceExVat: money("price_ex_vat").notNull(),
+  price: money("price").notNull(),
   addedAt: timestamp("added_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => ({
@@ -266,5 +267,15 @@ export type Notification = typeof notifications.$inferSelect;
 export type OrderStatusHistoryRow = typeof orderStatusHistory.$inferSelect;
 export type ConditionPriceRow = typeof conditionPrices.$inferSelect;
 export type FulfillmentEntryRow = typeof fulfillmentEntries.$inferSelect;
+export const wantedCards = pgTable("wanted_cards", {
+  id: serial("id").primaryKey(),
+  clientId: integer("client_id").notNull().references(() => clients.id),
+  cardId: integer("card_id").notNull().references(() => cards.id),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  clientCardUnique: uniqueIndex("wanted_cards_client_card_idx").on(table.clientId, table.cardId),
+}));
+
 export type Purchase = typeof purchases.$inferSelect;
 export type PurchaseItem = typeof purchaseItems.$inferSelect;
+export type WantedCard = typeof wantedCards.$inferSelect;

@@ -1,8 +1,9 @@
 import { Suspense } from "react";
 import { db } from "@/lib/db";
-import { cards, games, sets as setsTable } from "@/lib/db/schema";
+import { cards, games, sets as setsTable, wantedCards } from "@/lib/db/schema";
 import { ilike, or, eq, asc, desc, count, max, gte, lte, sql, SQL, getTableColumns } from "drizzle-orm";
 import { getVolumeDiscountInfo } from "@/lib/get-volume-discount";
+import { auth } from "@/lib/auth";
 import Nav from "@/components/Nav";
 import Link from "next/link";
 import GameTabs from "@/components/catalog/GameTabs";
@@ -44,12 +45,19 @@ export default async function CatalogPage({
   const priceMin = params.priceMin?.trim() || "";
   const priceMax = params.priceMax?.trim() || "";
 
-  // Phase 1: parallel — discount info + game list (no dependencies)
-  const [discountInfo, allGames] = await Promise.all([
+  // Phase 1: parallel — discount info + game list + wanted IDs (no dependencies)
+  const session = await auth();
+  const clientId = session?.user?.id ? parseInt(session.user.id) : null;
+
+  const [discountInfo, allGames, wantedRows] = await Promise.all([
     getVolumeDiscountInfo(),
     db.select().from(games).orderBy(asc(games.sortOrder)),
+    clientId
+      ? db.select({ cardId: wantedCards.cardId }).from(wantedCards).where(eq(wantedCards.clientId, clientId))
+      : Promise.resolve([]),
   ]);
   const volumeDiscountPct = discountInfo.volumeDiscountPct;
+  const wantedIds = wantedRows.map((r) => r.cardId);
 
   // Build where conditions
   const conditions: SQL[] = [];
@@ -85,8 +93,8 @@ export default async function CatalogPage({
     if (!isNaN(min)) {
       conditions.push(
         volumeDiscountPct > 0
-          ? sql`${cards.priceExVat} * ${discountMultiplier} >= ${min}`
-          : gte(cards.priceExVat, min)
+          ? sql`${cards.price} * ${discountMultiplier} >= ${min}`
+          : gte(cards.price, min)
       );
     }
   }
@@ -95,8 +103,8 @@ export default async function CatalogPage({
     if (!isNaN(max_)) {
       conditions.push(
         volumeDiscountPct > 0
-          ? sql`${cards.priceExVat} * ${discountMultiplier} <= ${max_}`
-          : lte(cards.priceExVat, max_)
+          ? sql`${cards.price} * ${discountMultiplier} <= ${max_}`
+          : lte(cards.price, max_)
       );
     }
   }
@@ -110,7 +118,7 @@ export default async function CatalogPage({
   // Sort column
   let orderByClause;
   if (sortField === "price") {
-    orderByClause = sortOrder === "desc" ? desc(cards.priceExVat) : asc(cards.priceExVat);
+    orderByClause = sortOrder === "desc" ? desc(cards.price) : asc(cards.price);
   } else if (sortField === "name") {
     orderByClause = sortOrder === "desc" ? desc(cards.name) : asc(cards.name);
   } else if (sortField === "set") {
@@ -214,6 +222,7 @@ export default async function CatalogPage({
               volumeDiscountPct={volumeDiscountPct}
               lastSynced={lastSynced instanceof Date ? lastSynced.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : null}
               currentCategory={categoryFilter}
+              wantedIds={wantedIds}
             />
           </Suspense>
 
@@ -222,7 +231,7 @@ export default async function CatalogPage({
           </Suspense>
 
           <p className="mt-4 text-xs text-gray-500">
-            {total} card{total !== 1 ? "s" : ""} total &middot; Prices ex-VAT
+            {total} card{total !== 1 ? "s" : ""} total &middot; All prices include VAT
           </p>
         </CatalogFilterProvider>
       </main>
