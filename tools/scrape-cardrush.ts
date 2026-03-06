@@ -191,7 +191,7 @@ function printSummary(
     const prices = wholesale.map((w) => w.cardrushJpy);
     const minJpy = Math.min(...prices);
     const maxJpy = Math.max(...prices);
-    const gbpPrices = wholesale.map((w) => w.pricing.priceExVat);
+    const gbpPrices = wholesale.map((w) => w.pricing.price);
     const minGbp = Math.min(...gbpPrices).toFixed(2);
     const maxGbp = Math.max(...gbpPrices).toFixed(2);
     const parallels = wholesale.filter((w) => w.isParallel).length;
@@ -267,21 +267,23 @@ async function upsertToDb(
         cardrush_jpy: card.cardrushJpy,
         gbp_jpy_rate: gbpJpyRate,
         base_gbp: card.pricing.baseGbp,
-        price_ex_vat: card.pricing.priceExVat,
+        price: card.pricing.price,
         last_synced_at: now,
         game_id: game.id,
         set_id: set.id,
         category: "singles",
         rarity: card.rarity ?? null,
         image_url: card.imageUrl ?? null,
+        stock: card.stock,
       }));
 
       // Batch upsert cards
       await sql`
         INSERT INTO cards ${sql(cardRows,
           "card_number", "sku", "name", "set_code", "set_name",
-          "cardrush_url", "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price_ex_vat",
-          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url"
+          "cardrush_url", "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price",
+          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url",
+          "stock"
         )}
         ON CONFLICT (sku) DO UPDATE SET
           name = EXCLUDED.name,
@@ -291,12 +293,13 @@ async function upsertToDb(
           cardrush_jpy = EXCLUDED.cardrush_jpy,
           gbp_jpy_rate = EXCLUDED.gbp_jpy_rate,
           base_gbp = EXCLUDED.base_gbp,
-          price_ex_vat = EXCLUDED.price_ex_vat,
+          price = EXCLUDED.price,
           last_synced_at = EXCLUDED.last_synced_at,
           game_id = EXCLUDED.game_id,
           set_id = EXCLUDED.set_id,
           rarity = EXCLUDED.rarity,
-          image_url = EXCLUDED.image_url`;
+          image_url = EXCLUDED.image_url,
+          stock = EXCLUDED.stock`;
 
       // Batch select card IDs by SKU
       const skus = batch.map((c) => c.sku);
@@ -333,20 +336,20 @@ async function upsertToDb(
           cardrush_jpy: card.cardrushJpy,
           gbp_jpy_rate: gbpJpyRate,
           base_gbp: card.pricing.baseGbp,
-          price_ex_vat: card.pricing.priceExVat,
+          price: card.pricing.price,
         }));
 
       if (archiveRows.length > 0) {
         await sql`
           INSERT INTO price_archive ${sql(archiveRows,
             "card_id", "snapshot_date", "sku", "set_code", "category",
-            "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price_ex_vat"
+            "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price"
           )}
           ON CONFLICT (card_id, snapshot_date) DO UPDATE SET
             cardrush_jpy = EXCLUDED.cardrush_jpy,
             gbp_jpy_rate = EXCLUDED.gbp_jpy_rate,
             base_gbp = EXCLUDED.base_gbp,
-            price_ex_vat = EXCLUDED.price_ex_vat`;
+            price = EXCLUDED.price`;
       }
     }
 
@@ -412,7 +415,7 @@ async function scrapeSealed(gc: GameConfig) {
     const prices = wholesale.map((w) => w.cardrushJpy);
     const minJpy = Math.min(...prices);
     const maxJpy = Math.max(...prices);
-    const gbpPrices = wholesale.map((w) => w.pricing.priceExVat);
+    const gbpPrices = wholesale.map((w) => w.pricing.price);
     const minGbp = Math.min(...gbpPrices).toFixed(2);
     const maxGbp = Math.max(...gbpPrices).toFixed(2);
 
@@ -484,20 +487,22 @@ async function upsertSealedToDb(
         cardrush_jpy: card.cardrushJpy,
         gbp_jpy_rate: gbpJpyRate,
         base_gbp: card.pricing.baseGbp,
-        price_ex_vat: card.pricing.priceExVat,
+        price: card.pricing.price,
         last_synced_at: now,
         game_id: game.id,
         set_id: set.id,
         category: "sealed",
         rarity: null,
         image_url: card.imageUrl ?? null,
+        stock: card.stock,
       }));
 
       await sql`
         INSERT INTO cards ${sql(cardRows,
           "card_number", "sku", "name", "set_code", "set_name",
-          "cardrush_url", "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price_ex_vat",
-          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url"
+          "cardrush_url", "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price",
+          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url",
+          "stock"
         )}
         ON CONFLICT (sku) DO UPDATE SET
           name = EXCLUDED.name,
@@ -505,11 +510,12 @@ async function upsertSealedToDb(
           cardrush_jpy = EXCLUDED.cardrush_jpy,
           gbp_jpy_rate = EXCLUDED.gbp_jpy_rate,
           base_gbp = EXCLUDED.base_gbp,
-          price_ex_vat = EXCLUDED.price_ex_vat,
+          price = EXCLUDED.price,
           last_synced_at = EXCLUDED.last_synced_at,
           game_id = EXCLUDED.game_id,
           set_id = EXCLUDED.set_id,
-          image_url = EXCLUDED.image_url`;
+          image_url = EXCLUDED.image_url,
+          stock = EXCLUDED.stock`;
 
       // Price history
       const skus = batch.map((c) => c.sku);
@@ -545,20 +551,20 @@ async function upsertSealedToDb(
           cardrush_jpy: card.cardrushJpy,
           gbp_jpy_rate: gbpJpyRate,
           base_gbp: card.pricing.baseGbp,
-          price_ex_vat: card.pricing.priceExVat,
+          price: card.pricing.price,
         }));
 
       if (archiveRows.length > 0) {
         await sql`
           INSERT INTO price_archive ${sql(archiveRows,
             "card_id", "snapshot_date", "sku", "set_code", "category",
-            "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price_ex_vat"
+            "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price"
           )}
           ON CONFLICT (card_id, snapshot_date) DO UPDATE SET
             cardrush_jpy = EXCLUDED.cardrush_jpy,
             gbp_jpy_rate = EXCLUDED.gbp_jpy_rate,
             base_gbp = EXCLUDED.base_gbp,
-            price_ex_vat = EXCLUDED.price_ex_vat`;
+            price = EXCLUDED.price`;
       }
     }
 
@@ -610,6 +616,8 @@ async function main() {
           WHERE category = 'singles'
             AND (last_synced_at IS NULL OR last_synced_at::date < ${scrapeStartDate}::date)
             AND id NOT IN (SELECT DISTINCT card_id FROM order_items)
+            AND id NOT IN (SELECT DISTINCT card_id FROM purchase_items)
+            AND id NOT IN (SELECT DISTINCT card_id FROM cart_items)
             ${gameId ? sql`AND game_id = ${gameId}` : sql``}`;
         if (staleIds.length > 0) {
           const ids = staleIds.map((r: any) => r.id);

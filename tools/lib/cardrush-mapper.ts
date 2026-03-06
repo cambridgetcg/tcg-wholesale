@@ -1,9 +1,10 @@
 // Map raw CardRush products to wholesale card format
 // Filters, deduplicates, generates SKUs, and calculates GBP pricing
 //
-// SKU assignment uses a global state so that the same card number appearing
-// in multiple product groups gets unique P-suffixed SKUs. Sets are scraped
-// in product-group-ID order (ascending) so lower IDs claim the base SKU first.
+// Every card (standard and parallel) embeds the encoded CardRush product ID
+// in the SKU (e.g. OP-OP05-001-JP-V13KF) so every SKU is permanently tied
+// to its source listing. Standard cards are still deduped by card number
+// (cheapest listing wins); the product ID is appended to the base SKU.
 
 import { RawProduct, isGraded } from "./cardrush-parser";
 import { MIN_PRICE_JPY, type GameMapConfig } from "./config";
@@ -25,45 +26,36 @@ export interface WholesaleCard {
 }
 
 // ---------------------------------------------------------------------------
-// Global SKU state — tracks P-index across all product groups
+// Global SKU state — tracks base SKU claims and seen URLs across sets
 // ---------------------------------------------------------------------------
 
-export interface SkuTracker {
-  baseTaken: boolean;
-  nextP: number; // starts at 1
-}
-
 export interface GlobalSkuState {
-  skus: Map<string, SkuTracker>;
+  /** Tracks which base SKUs have been claimed by a standard card */
+  baseTaken: Set<string>;
   /** Tracks seen productUrls to skip duplicates across sets (e.g. PRB re-lists original-set cards) */
   seenUrls: Set<string>;
 }
 
 export function createSkuState(): GlobalSkuState {
-  return { skus: new Map(), seenUrls: new Set() };
+  return { baseTaken: new Set(), seenUrls: new Set() };
 }
 
-function assignSku(
-  skuMap: Map<string, SkuTracker>,
-  baseSku: string,
-  isParallel: boolean
-): string {
-  let tracker = skuMap.get(baseSku);
-  if (!tracker) {
-    tracker = { baseTaken: false, nextP: 1 };
-    skuMap.set(baseSku, tracker);
-  }
+// Extract CardRush product ID from URL (e.g. /product/9816 → "9816")
+function extractProductId(url: string | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/product\/(\d+)/);
+  return match ? match[1] : null;
+}
 
-  // Standard cards get the base SKU if it's still available
-  if (!isParallel && !tracker.baseTaken) {
-    tracker.baseTaken = true;
-    return baseSku;
-  }
+// Obfuscate product ID so clients can't derive the supplier URL from the SKU
+const SKU_XOR_KEY = 48879;
 
-  // Otherwise assign next P number
-  const sku = `${baseSku}-P${tracker.nextP}`;
-  tracker.nextP++;
-  return sku;
+export function encodeProductId(id: number): string {
+  return (id ^ SKU_XOR_KEY).toString(36).toUpperCase();
+}
+
+export function decodeProductId(encoded: string): number {
+  return parseInt(encoded, 36) ^ SKU_XOR_KEY;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +98,7 @@ export function mapToWholesale(
   mapConfig?: GameMapConfig
 ): WholesaleCard[] {
   const state = skuState ?? createSkuState();
-  const { skus: skuMap, seenUrls } = state;
+  const { baseTaken, seenUrls } = state;
   const genSku = mapConfig?.generateBaseSku ?? defaultGenerateBaseSku;
   const extraCleaner = mapConfig?.cleanNameExtra;
 
@@ -136,17 +128,25 @@ export function mapToWholesale(
   const wholesale: WholesaleCard[] = [];
 
   // Step 3a: Standard cards — dedup by card number, take lowest price
+  // Sort by product URL for deterministic selection when prices are equal
   for (const [cardNum, group] of standardGroups) {
-    group.sort((a, b) => a.priceJpy - b.priceJpy);
+    group.sort((a, b) => a.priceJpy - b.priceJpy || (a.productUrl || "").localeCompare(b.productUrl || ""));
     const p = group[0];
 
     // Skip if this exact product URL was already mapped from a prior set
     if (p.productUrl && seenUrls.has(p.productUrl)) continue;
 
-    const baseSku = genSku(cardNum, setCode);
-    const sku = assignSku(skuMap, baseSku, false);
-    const pricing = calculatePrice(p.priceJpy, gbpJpyRate);
+    const base = genSku(cardNum, setCode);
+    // Dedup by base SKU (one standard card per card number)
+    if (baseTaken.has(base)) continue;
+    baseTaken.add(base);
 
+    // Embed product ID so every SKU links back to its CardRush listing
+    const productId = extractProductId(p.productUrl);
+    if (!productId) continue; // skip if no URL — can't guarantee traceability
+    const sku = `${base}-V${encodeProductId(Number(productId))}`;
+
+    const pricing = calculatePrice(p.priceJpy, gbpJpyRate);
     if (p.productUrl) seenUrls.add(p.productUrl);
 
     wholesale.push({
@@ -164,7 +164,7 @@ export function mapToWholesale(
     });
   }
 
-  // Step 3b: Parallel cards — each unique listing gets next P number, sorted by price
+  // Step 3b: Parallel cards — SKU embeds encoded product ID (V{encoded})
   for (const [cardNum, group] of parallelGroups) {
     // Dedup by name (same art variant may have multiple condition listings)
     const seen = new Map<string, RawProduct>();
@@ -176,17 +176,18 @@ export function mapToWholesale(
       }
     }
 
-    // Sort by price ascending
-    const variants = [...seen.values()].sort((a, b) => a.priceJpy - b.priceJpy);
-    const baseSku = genSku(cardNum, setCode);
+    const base = genSku(cardNum, setCode);
 
-    for (const p of variants) {
+    for (const p of seen.values()) {
       // Skip if this exact product URL was already mapped from a prior set
       if (p.productUrl && seenUrls.has(p.productUrl)) continue;
 
-      const sku = assignSku(skuMap, baseSku, true);
-      const pricing = calculatePrice(p.priceJpy, gbpJpyRate);
+      // Derive SKU from product URL — permanently ties SKU to the listing
+      const productId = extractProductId(p.productUrl);
+      if (!productId) continue; // skip parallels without a URL
+      const sku = `${base}-V${encodeProductId(Number(productId))}`;
 
+      const pricing = calculatePrice(p.priceJpy, gbpJpyRate);
       if (p.productUrl) seenUrls.add(p.productUrl);
 
       wholesale.push({
@@ -214,13 +215,6 @@ export function mapToWholesale(
 // ---------------------------------------------------------------------------
 // Sealed product mapper (booster boxes, starter decks, collections)
 // ---------------------------------------------------------------------------
-
-// Extract CardRush product ID from URL (e.g. /product/9816 → 9816)
-function extractProductId(url: string | null): string | null {
-  if (!url) return null;
-  const match = url.match(/\/product\/(\d+)/);
-  return match ? match[1] : null;
-}
 
 // Clean sealed product name — strip condition markers but keep identifiers
 function cleanSealedName(raw: string): string {
@@ -268,11 +262,12 @@ export function mapSealedToWholesale(
     const productId = extractProductId(p.productUrl);
     if (!productId) continue;
 
-    const sku = `SEALED-${productId}-JP`;
+    const encodedId = encodeProductId(Number(productId));
+    const sku = `SEALED-V${encodedId}-JP`;
     const pricing = calculateSealedPrice(p.priceJpy, gbpJpyRate);
 
     wholesale.push({
-      cardNumber: `SEALED-${productId}`,
+      cardNumber: `SEALED-V${encodedId}`,
       sku,
       name: cleanSealedName(p.name),
       setCode: "SEALED",
