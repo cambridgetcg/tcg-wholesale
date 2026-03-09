@@ -277,6 +277,14 @@ export const wantedCards = pgTable("wanted_cards", {
   clientCardUnique: uniqueIndex("wanted_cards_client_card_idx").on(table.clientId, table.cardId),
 }));
 
+export const stockTargets = pgTable("stock_targets", {
+  id: serial("id").primaryKey(),
+  priceMin: money("price_min").notNull(),
+  priceMax: money("price_max").notNull(),
+  targetQty: integer("target_qty").notNull(),
+});
+
 export type Purchase = typeof purchases.$inferSelect;
 export type PurchaseItem = typeof purchaseItems.$inferSelect;
 export type WantedCard = typeof wantedCards.$inferSelect;
+export type StockTarget = typeof stockTargets.$inferSelect;
