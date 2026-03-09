@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { adminLogin, BASE } from "./helpers";
+import { adminLogin, BASE, ADMIN_BASE } from "./helpers";
 
 /*
  * E2E: Full order processing flow against the live site
@@ -117,7 +117,7 @@ test.describe("Order processing flow", () => {
     expect(orderId).toBeGreaterThan(0);
     await adminLogin(page);
 
-    await page.goto(`/admin/orders/${orderId}/stock-check`);
+    await page.goto(`${ADMIN_BASE}/admin/orders/${orderId}/stock-check`);
     await expect(
       page.locator("h1", { hasText: "Stock Check" }),
     ).toBeVisible({ timeout: 15_000 });
@@ -132,7 +132,7 @@ test.describe("Order processing flow", () => {
     expect(orderId).toBeGreaterThan(0);
     await adminLogin(page);
 
-    await page.goto(`/admin/orders/${orderId}/stock-check`);
+    await page.goto(`${ADMIN_BASE}/admin/orders/${orderId}/stock-check`);
     await expect(
       page.locator("h1", { hasText: "Stock Check" }),
     ).toBeVisible({ timeout: 15_000 });
@@ -162,7 +162,7 @@ test.describe("Order processing flow", () => {
     await sendBtn.click();
 
     // Should redirect to admin orders page
-    await page.waitForURL(/\/admin\/orders/, { timeout: 15_000 });
+    await page.waitForURL(/admin.*\/orders/, { timeout: 15_000 });
   });
 
   test("5 — Verify order is Quoted and advance through statuses", async ({
@@ -171,7 +171,7 @@ test.describe("Order processing flow", () => {
     expect(orderId).toBeGreaterThan(0);
     await adminLogin(page);
 
-    await page.goto("/admin/orders");
+    await page.goto(`${ADMIN_BASE}/admin/orders`);
     await expect(
       page.locator("h1", { hasText: "Manage Orders" }),
     ).toBeVisible({ timeout: 15_000 });
