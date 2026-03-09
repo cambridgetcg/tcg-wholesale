@@ -136,7 +136,7 @@ export default async function DiscountPage() {
         </div>
 
         <p className="mt-6 text-xs text-gray-500">
-          Discounts are calculated based on last month&apos;s total purchase volume (ex-VAT) and applied automatically to all catalog prices.
+          Discounts are calculated based on last month&apos;s total purchase volume (inc. VAT) and applied automatically to all catalog prices.
           Tiers reset on the 1st of each month.
         </p>
       </main>

@@ -16,7 +16,7 @@ interface ClientRow {
 interface OrderRow {
   id: number;
   status: string;
-  totalExVat: number;
+  total: number;
   createdAt: string | null;
 }
 
@@ -197,7 +197,7 @@ export default function AdminClientsPage() {
                                   <td className="py-1">#{order.id}</td>
                                   <td className="py-1 text-gray-400">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "\u2014"}</td>
                                   <td className="py-1"><StatusBadge status={order.status} /></td>
-                                  <td className="py-1 text-right font-medium">\u00A3{order.totalExVat.toFixed(2)}</td>
+                                  <td className="py-1 text-right font-medium">\u00A3{order.total.toFixed(2)}</td>
                                 </tr>
                               ))}
                             </tbody>

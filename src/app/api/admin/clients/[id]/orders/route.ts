@@ -11,7 +11,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
   const { id } = await params;
   const clientOrders = await db
-    .select({ id: orders.id, status: orders.status, totalExVat: orders.totalExVat, createdAt: orders.createdAt })
+    .select({ id: orders.id, status: orders.status, total: orders.total, createdAt: orders.createdAt })
     .from(orders)
     .where(eq(orders.clientId, parseInt(id)))
     .orderBy(desc(orders.createdAt));

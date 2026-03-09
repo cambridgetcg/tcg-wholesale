@@ -1,12 +1,10 @@
-import { VAT_RATE } from "@/lib/pricing";
-
 // ---------------------------------------------------------------------------
 // Data interfaces
 // ---------------------------------------------------------------------------
 
 export interface OrderData {
   id: number;
-  totalExVat: number;
+  total: number;
   volumeDiscount: number;
   quotedExpiresAt: Date | string | null;
   notes: string | null;
@@ -16,7 +14,7 @@ export interface OrderItemData {
   cardNumber: string;
   cardName: string | null;
   quantity: number;
-  unitPriceExVat: number;
+  unitPrice: number;
   lineTotal: number;
 }
 
@@ -88,7 +86,7 @@ function itemsTable(items: OrderItemData[]): string {
         <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};font-family:monospace;color:${ACCENT};">${item.cardNumber}</td>
         <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};color:${MUTED};">${item.cardName ?? ""}</td>
         <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};text-align:right;">${item.quantity}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};text-align:right;color:${MUTED};">&pound;${fmt(item.unitPriceExVat)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};text-align:right;color:${MUTED};">&pound;${fmt(item.unitPrice)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};text-align:right;font-weight:600;">&pound;${fmt(item.lineTotal)}</td>
       </tr>`,
     )
@@ -111,12 +109,10 @@ function totalsBlock(order: OrderData): string {
   const discountPct = order.volumeDiscount;
   const preDiscountSubtotal =
     discountPct > 0
-      ? Math.round((order.totalExVat / (1 - discountPct)) * 100) / 100
-      : order.totalExVat;
+      ? Math.round((order.total / (1 - discountPct)) * 100) / 100
+      : order.total;
   const discountAmount =
-    Math.round((preDiscountSubtotal - order.totalExVat) * 100) / 100;
-  const vat = Math.round(order.totalExVat * VAT_RATE * 100) / 100;
-  const totalIncVat = Math.round((order.totalExVat + vat) * 100) / 100;
+    Math.round((preDiscountSubtotal - order.total) * 100) / 100;
 
   const discountRow =
     discountPct > 0
@@ -134,16 +130,8 @@ function totalsBlock(order: OrderData): string {
       </tr>
       ${discountRow}
       <tr>
-        <td style="padding:8px 0 4px;border-top:1px solid ${BORDER};font-weight:600;">Total ex-VAT</td>
-        <td style="padding:8px 0 4px;border-top:1px solid ${BORDER};text-align:right;font-weight:600;">&pound;${fmt(order.totalExVat)}</td>
-      </tr>
-      <tr>
-        <td style="padding:4px 0;color:${MUTED};">VAT (20%)</td>
-        <td style="padding:4px 0;text-align:right;color:${MUTED};">&pound;${fmt(vat)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 0 0;border-top:1px solid ${BORDER};font-size:18px;font-weight:700;">Total inc VAT</td>
-        <td style="padding:8px 0 0;border-top:1px solid ${BORDER};text-align:right;font-size:18px;font-weight:700;color:${GREEN};">&pound;${fmt(totalIncVat)}</td>
+        <td style="padding:8px 0 0;border-top:1px solid ${BORDER};font-size:18px;font-weight:700;">Total</td>
+        <td style="padding:8px 0 0;border-top:1px solid ${BORDER};text-align:right;font-size:18px;font-weight:700;color:${GREEN};">&pound;${fmt(order.total)}</td>
       </tr>
     </table>`;
 }
@@ -244,9 +232,6 @@ export function newOrderAdmin(
   client: ClientData,
   itemCount: number,
 ): EmailResult {
-  const vat = Math.round(order.totalExVat * VAT_RATE * 100) / 100;
-  const totalIncVat = Math.round((order.totalExVat + vat) * 100) / 100;
-
   const adminUrl = `${APP_URL}/admin/orders`;
 
   const body = `
@@ -269,12 +254,8 @@ export function newOrderAdmin(
         <td style="padding:4px 0;text-align:right;">${itemCount}</td>
       </tr>
       <tr>
-        <td style="padding:4px 0;color:${MUTED};">Total ex-VAT</td>
-        <td style="padding:4px 0;text-align:right;">&pound;${fmt(order.totalExVat)}</td>
-      </tr>
-      <tr>
-        <td style="padding:8px 0 0;border-top:1px solid ${BORDER};font-weight:700;font-size:16px;">Total inc VAT</td>
-        <td style="padding:8px 0 0;border-top:1px solid ${BORDER};text-align:right;font-weight:700;font-size:16px;color:${GREEN};">&pound;${fmt(totalIncVat)}</td>
+        <td style="padding:8px 0 0;border-top:1px solid ${BORDER};font-weight:700;font-size:16px;">Total</td>
+        <td style="padding:8px 0 0;border-top:1px solid ${BORDER};text-align:right;font-weight:700;font-size:16px;color:${GREEN};">&pound;${fmt(order.total)}</td>
       </tr>
     </table>
     ${order.notes ? `<p style="margin:0 0 16px;padding:12px;background:${BG};border:1px solid ${BORDER};border-radius:6px;font-size:13px;color:${MUTED};"><strong style="color:${TEXT};">Client notes:</strong> ${order.notes}</p>` : ""}
@@ -287,7 +268,7 @@ export function newOrderAdmin(
     </table>`;
 
   return {
-    subject: `New Order #${order.id} from ${client.name} — \u00a3${fmt(totalIncVat)}`,
+    subject: `New Order #${order.id} from ${client.name} — \u00a3${fmt(order.total)}`,
     html: wrap(`New Order #${order.id}`, body),
   };
 }

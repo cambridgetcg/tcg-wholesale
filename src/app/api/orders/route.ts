@@ -50,20 +50,20 @@ export async function POST(req: NextRequest) {
 
   // Resolve prices server-side from DB (never trust client-sent prices)
   let subtotal = 0;
-  const resolvedItems: { cardId: number; quantity: number; unitPriceExVat: number; lineTotal: number }[] = [];
+  const resolvedItems: { cardId: number; quantity: number; unitPrice: number; lineTotal: number }[] = [];
 
   for (const item of items) {
     const [card] = await db.select().from(cards).where(eq(cards.id, item.cardId)).limit(1);
     if (!card) {
       return NextResponse.json({ error: `Card ${item.cardId} not found` }, { status: 400 });
     }
-    if (card.priceExVat == null || card.priceExVat <= 0) {
+    if (card.price == null || card.price <= 0) {
       return NextResponse.json({ error: `Card ${card.cardNumber} has no valid price` }, { status: 400 });
     }
-    const unitPrice = applyVolumeDiscount(card.priceExVat, discountPct);
+    const unitPrice = applyVolumeDiscount(card.price, discountPct);
     const lineTotal = Math.round(unitPrice * item.quantity * 100) / 100;
     subtotal += lineTotal;
-    resolvedItems.push({ cardId: item.cardId, quantity: item.quantity, unitPriceExVat: unitPrice, lineTotal });
+    resolvedItems.push({ cardId: item.cardId, quantity: item.quantity, unitPrice, lineTotal });
   }
 
   const now = new Date();
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     .values({
       clientId,
       status: "submitted",
-      totalExVat: Math.round(subtotal * 100) / 100,
+      total: Math.round(subtotal * 100) / 100,
       volumeDiscount: discountPct,
       notes: idempotencyKey ? `__idem:${idempotencyKey}` : orderNotes,
       createdAt: now,

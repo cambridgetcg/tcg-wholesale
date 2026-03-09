@@ -49,7 +49,7 @@ export async function sendOrderEmail(
 
     const orderData: OrderData = {
       id: order.id,
-      totalExVat: order.totalExVat,
+      total: order.total,
       volumeDiscount: order.volumeDiscount,
       quotedExpiresAt: order.quotedExpiresAt,
       notes: order.notes,
@@ -85,7 +85,7 @@ export async function sendOrderEmail(
             cardNumber: cards.cardNumber,
             cardName: cards.name,
             quantity: orderItems.quantity,
-            unitPriceExVat: orderItems.unitPriceExVat,
+            unitPrice: orderItems.unitPrice,
             lineTotal: orderItems.lineTotal,
           })
           .from(orderItems)
@@ -96,7 +96,7 @@ export async function sendOrderEmail(
           cardNumber: i.cardNumber,
           cardName: i.cardName,
           quantity: i.quantity,
-          unitPriceExVat: i.unitPriceExVat,
+          unitPrice: i.unitPrice,
           lineTotal: i.lineTotal,
         }));
 

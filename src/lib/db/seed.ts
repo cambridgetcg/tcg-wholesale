@@ -127,7 +127,7 @@ async function seed() {
       cardrushJpy: c.jpy,
       gbpJpyRate: rate,
       baseGbp: price.baseGbp,
-      priceExVat: price.priceExVat,
+      price: price.price,
       lastSyncedAt: new Date(),
       gameId: onepieceId,
       setId: setIdMap[c.setCode],

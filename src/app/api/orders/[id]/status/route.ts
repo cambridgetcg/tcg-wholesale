@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const orderId = parseInt(id);
   const body = await req.json() as {
     status?: string;
-    items?: { id: number; unitPriceExVat: number }[];
+    items?: { id: number; unitPrice: number }[];
   };
 
   // Fetch current order
@@ -34,16 +34,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     for (const item of body.items) {
       const [lineItem] = await db.select().from(orderItems).where(eq(orderItems.id, item.id)).limit(1);
       if (!lineItem || lineItem.orderId !== orderId) continue;
-      const lineTotal = Math.round(item.unitPriceExVat * lineItem.quantity * 100) / 100;
+      const lineTotal = Math.round(item.unitPrice * lineItem.quantity * 100) / 100;
       await db.update(orderItems)
-        .set({ unitPriceExVat: item.unitPriceExVat, lineTotal })
+        .set({ unitPrice: item.unitPrice, lineTotal })
         .where(eq(orderItems.id, item.id));
     }
     // Recalculate order total from non-removed items
     const allItems = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId));
     const total = allItems.filter((i) => !i.removedAt).reduce((sum, i) => sum + i.lineTotal, 0);
     await db.update(orders)
-      .set({ totalExVat: Math.round(total * 100) / 100, updatedAt: new Date() })
+      .set({ total: Math.round(total * 100) / 100, updatedAt: new Date() })
       .where(eq(orders.id, orderId));
   }
 
@@ -93,7 +93,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // When order becomes "paid", add its total to client's currentMonthSpend
     if (toStatus === "paid") {
       await db.update(clients)
-        .set({ currentMonthSpend: sql`current_month_spend + ${order.totalExVat}` })
+        .set({ currentMonthSpend: sql`current_month_spend + ${order.total}` })
         .where(eq(clients.id, order.clientId));
     }
 

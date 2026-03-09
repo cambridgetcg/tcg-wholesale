@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
+import { syncUkStock } from "@/lib/sync-uk-stock";
 
 export async function GET() {
   const session = await auth();
@@ -48,4 +49,15 @@ export async function GET() {
   `);
 
   return NextResponse.json(rows);
+}
+
+/** POST /api/admin/stock — Sync UK stock into cards.stock */
+export async function POST() {
+  const session = await auth();
+  if (!session || session.user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  await syncUkStock();
+  return NextResponse.json({ ok: true });
 }

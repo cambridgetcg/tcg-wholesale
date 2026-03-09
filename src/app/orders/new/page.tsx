@@ -5,7 +5,6 @@ import { useState } from "react";
 import Link from "next/link";
 import Nav from "@/components/Nav";
 import { useCart } from "@/lib/cart-context";
-import { VAT_RATE } from "@/lib/pricing";
 
 export default function NewOrderPage() {
   const router = useRouter();
@@ -14,7 +13,7 @@ export default function NewOrderPage() {
     updateQuantity,
     removeItem,
     clear,
-    totalExVat,
+    total,
     discountedTotal,
     itemCount,
     volumeDiscountPct,
@@ -23,9 +22,7 @@ export default function NewOrderPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const discountAmount = totalExVat - discountedTotal;
-  const vat = discountedTotal * VAT_RATE;
-  const totalIncVat = discountedTotal + vat;
+  const discountAmount = total - discountedTotal;
 
   // Next discount tier explanation
   const currentPctDisplay = (volumeDiscountPct * 100).toFixed(0);
@@ -86,7 +83,7 @@ export default function NewOrderPage() {
                 <thead className="bg-[#12121a]">
                   <tr className="text-left text-gray-400">
                     <th className="px-2 md:px-4 py-3 font-medium">Card #</th>
-                    <th className="px-2 md:px-4 py-3 font-medium text-right">Price ex-VAT</th>
+                    <th className="px-2 md:px-4 py-3 font-medium text-right">Price</th>
                     <th className="px-2 md:px-4 py-3 font-medium text-right">Qty</th>
                     <th className="px-2 md:px-4 py-3 font-medium text-right">Line Total</th>
                     <th className="px-2 md:px-4 py-3"></th>
@@ -99,7 +96,7 @@ export default function NewOrderPage() {
                         <span className="font-mono text-brand-500">{item.card.cardNumber}</span>
                       </td>
                       <td className="px-2 md:px-4 py-3 text-right text-gray-400">
-                        &pound;{item.card.priceExVat.toFixed(2)}
+                        &pound;{item.card.price.toFixed(2)}
                       </td>
                       <td className="px-2 md:px-4 py-3 text-right">
                         <input
@@ -114,7 +111,7 @@ export default function NewOrderPage() {
                         />
                       </td>
                       <td className="px-2 md:px-4 py-3 text-right font-medium">
-                        &pound;{(item.card.priceExVat * item.quantity).toFixed(2)}
+                        &pound;{(item.card.price * item.quantity).toFixed(2)}
                       </td>
                       <td className="px-2 md:px-4 py-3 text-right">
                         <button
@@ -137,23 +134,15 @@ export default function NewOrderPage() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-400">Subtotal</span>
-                  <span>&pound;{totalExVat.toFixed(2)}</span>
+                  <span>&pound;{total.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-green-400">
                   <span>Volume Discount ({currentPctDisplay}%)</span>
                   <span>-&pound;{discountAmount.toFixed(2)}</span>
                 </div>
-                <div className="border-t border-[#1e1e2e] pt-2 flex justify-between font-medium">
-                  <span>Total ex-VAT</span>
-                  <span>&pound;{discountedTotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-gray-400">
-                  <span>VAT (20%)</span>
-                  <span>&pound;{vat.toFixed(2)}</span>
-                </div>
                 <div className="border-t border-[#1e1e2e] pt-2 flex justify-between text-lg font-bold">
-                  <span>Total inc VAT</span>
-                  <span className="text-green-400">&pound;{totalIncVat.toFixed(2)}</span>
+                  <span>Total</span>
+                  <span className="text-green-400">&pound;{discountedTotal.toFixed(2)}</span>
                 </div>
               </div>
 

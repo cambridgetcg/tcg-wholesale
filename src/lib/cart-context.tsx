@@ -10,7 +10,7 @@ export interface CardData {
   name: string;
   setCode: string | null;
   setName: string | null;
-  priceExVat: number;
+  price: number;
 }
 
 export interface CartItem {
@@ -25,7 +25,7 @@ interface CartContextValue {
   updateQuantity: (cardId: number, qty: number) => void;
   clear: () => void;
   flushSync: () => Promise<void>;
-  totalExVat: number;
+  total: number;
   discountedTotal: number;
   itemCount: number;
   volumeDiscountPct: number;
@@ -35,6 +35,18 @@ const CartContext = createContext<CartContextValue | null>(null);
 
 const STORAGE_KEY = "tcg-cart";
 const SYNC_DEBOUNCE_MS = 1500;
+
+/** Migrate old cart items that used priceExVat → price */
+function migrateCartItems(items: CartItem[]): CartItem[] {
+  return items.map((item) => {
+    const card = item.card as CardData & { priceExVat?: number };
+    if (card.price == null && card.priceExVat != null) {
+      const { priceExVat, ...rest } = card;
+      return { ...item, card: { ...rest, price: priceExVat } as CardData };
+    }
+    return item;
+  });
+}
 
 function mergeItems(local: CartItem[], server: CartItem[]): CartItem[] {
   const map = new Map<number, CartItem>();
@@ -90,8 +102,8 @@ export function CartProvider({
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          localItems = parsed;
-          setItems(parsed);
+          localItems = migrateCartItems(parsed);
+          setItems(localItems);
         }
       }
     } catch {}
@@ -189,14 +201,14 @@ export function CartProvider({
     }
   }, [items]);
 
-  const totalExVat = useMemo(
-    () => items.reduce((sum, i) => sum + i.card.priceExVat * i.quantity, 0),
+  const total = useMemo(
+    () => items.reduce((sum, i) => sum + i.card.price * i.quantity, 0),
     [items]
   );
 
   const discountedTotal = useMemo(
-    () => applyVolumeDiscount(totalExVat, volumeDiscountPct),
-    [totalExVat, volumeDiscountPct]
+    () => applyVolumeDiscount(total, volumeDiscountPct),
+    [total, volumeDiscountPct]
   );
 
   const itemCount = useMemo(
@@ -213,7 +225,7 @@ export function CartProvider({
         updateQuantity,
         clear,
         flushSync,
-        totalExVat,
+        total,
         discountedTotal,
         itemCount,
         volumeDiscountPct,

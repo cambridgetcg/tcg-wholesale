@@ -84,6 +84,9 @@ export default function Nav() {
               <Link href="/discount" className="hover:text-brand-500 transition">
                 Discounts
               </Link>
+              <Link href="/margin" className="hover:text-brand-500 transition">
+                Margins
+              </Link>
               {isAdmin && (
                 <a href={adminUrl} className="hover:text-brand-500 transition">
                   Admin
@@ -137,6 +140,9 @@ export default function Nav() {
               </Link>
               <Link href="/discount" className="hover:text-brand-500 transition" onClick={() => setMenuOpen(false)}>
                 Discounts
+              </Link>
+              <Link href="/margin" className="hover:text-brand-500 transition" onClick={() => setMenuOpen(false)}>
+                Margins
               </Link>
               {isAdmin && (
                 <a href={adminUrl} className="hover:text-brand-500 transition" onClick={() => setMenuOpen(false)}>

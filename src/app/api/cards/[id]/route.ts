@@ -11,11 +11,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
-  const { priceExVat } = await req.json() as { priceExVat: number };
+  const { price } = await req.json() as { price: number };
 
   const [updated] = await db
     .update(cards)
-    .set({ priceExVat, lastSyncedAt: new Date() })
+    .set({ price, lastSyncedAt: new Date() })
     .where(eq(cards.id, parseInt(id)))
     .returning();
 

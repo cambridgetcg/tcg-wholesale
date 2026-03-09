@@ -19,7 +19,7 @@ interface StockItem {
   cardrushJpy: number | null;
   gbpJpyRate: number | null;
   quantity: number;
-  unitPriceExVat: number;
+  unitPrice: number;
   lineTotal: number;
   stockStatus: string;
   checkedPriceJpy: number | null;
@@ -242,7 +242,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
             Stock Check — Order #{orderId}
           </h1>
           <p className="mt-1 text-sm text-gray-400">
-            {clientName}{clientCompany ? ` (${clientCompany})` : ""} — £{orderTotal.toFixed(2)} ex-VAT
+            {clientName}{clientCompany ? ` (${clientCompany})` : ""} — £{orderTotal.toFixed(2)}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -397,7 +397,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
                 </div>
                 <div className="mt-1 flex items-center gap-4 text-xs text-gray-500">
                   <span>¥{item.cardrushJpy?.toLocaleString() ?? "—"}</span>
-                  <span>£{item.unitPriceExVat.toFixed(2)}</span>
+                  <span>£{item.unitPrice.toFixed(2)}</span>
                   <span>Qty: {item.quantity}</span>
                   <span className="font-medium text-gray-400">
                     Line: £{item.lineTotal.toFixed(2)}
@@ -431,7 +431,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
             {/* Price discrepancy alert */}
             {item.priceDiffPct != null && (
               <div className="mt-2 rounded bg-amber-900/20 border border-amber-900/30 px-3 py-2 text-xs text-amber-400">
-                Price may have changed since last sync — current calc: £{item.currentCalcPrice?.toFixed(2)} vs order: £{item.unitPriceExVat.toFixed(2)} ({(item.priceDiffPct * 100).toFixed(1)}% diff)
+                Price may have changed since last sync — current calc: £{item.currentCalcPrice?.toFixed(2)} vs order: £{item.unitPrice.toFixed(2)} ({(item.priceDiffPct * 100).toFixed(1)}% diff)
               </div>
             )}
 

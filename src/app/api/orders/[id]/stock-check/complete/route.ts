@@ -33,7 +33,7 @@ export async function POST(
       id: orderItems.id,
       cardId: orderItems.cardId,
       quantity: orderItems.quantity,
-      unitPriceExVat: orderItems.unitPriceExVat,
+      unitPrice: orderItems.unitPrice,
       originalUnitPrice: orderItems.originalUnitPrice,
       stockStatus: orderItems.stockStatus,
       checkedPriceJpy: orderItems.checkedPriceJpy,
@@ -70,17 +70,17 @@ export async function POST(
 
     const newPrice = calculatePriceByCategory(item.checkedPriceJpy!, card.gbpJpyRate, card.category);
     // Sanity check: reject prices that are negative or more than 10x the original
-    if (newPrice.priceExVat <= 0 || (item.unitPriceExVat > 0 && newPrice.priceExVat > item.unitPriceExVat * 10)) {
+    if (newPrice.price <= 0 || (item.unitPrice > 0 && newPrice.price > item.unitPrice * 10)) {
       return NextResponse.json({
-        error: `Calculated price £${newPrice.priceExVat.toFixed(2)} for item #${item.id} is unreasonable (original: £${item.unitPriceExVat.toFixed(2)})`,
+        error: `Calculated price £${newPrice.price.toFixed(2)} for item #${item.id} is unreasonable (original: £${item.unitPrice.toFixed(2)})`,
       }, { status: 400 });
     }
-    const lineTotal = Math.round(newPrice.priceExVat * item.quantity * 100) / 100;
+    const lineTotal = Math.round(newPrice.price * item.quantity * 100) / 100;
 
     await db.update(orderItems)
       .set({
-        unitPriceExVat: newPrice.priceExVat,
-        originalUnitPrice: item.originalUnitPrice ?? item.unitPriceExVat,
+        unitPrice: newPrice.price,
+        originalUnitPrice: item.originalUnitPrice ?? item.unitPrice,
         lineTotal,
       })
       .where(eq(orderItems.id, item.id));
@@ -91,15 +91,15 @@ export async function POST(
   let partialCount = 0;
   const partialItems = items.filter((i) => i.stockStatus === "partial" && i.checkedQuantity != null);
   for (const item of partialItems) {
-    let unitPrice = item.unitPriceExVat;
+    let unitPrice = item.unitPrice;
 
     // If a new JPY price was also provided, recalculate unit price
     if (item.checkedPriceJpy != null) {
       const [card] = await db.select().from(cards).where(eq(cards.id, item.cardId)).limit(1);
       if (card?.gbpJpyRate) {
         const newPrice = calculatePriceByCategory(item.checkedPriceJpy, card.gbpJpyRate, card.category);
-        if (newPrice.priceExVat > 0 && (item.unitPriceExVat === 0 || newPrice.priceExVat <= item.unitPriceExVat * 10)) {
-          unitPrice = newPrice.priceExVat;
+        if (newPrice.price > 0 && (item.unitPrice === 0 || newPrice.price <= item.unitPrice * 10)) {
+          unitPrice = newPrice.price;
         }
       }
     }
@@ -110,8 +110,8 @@ export async function POST(
     await db.update(orderItems)
       .set({
         quantity: newQty,
-        unitPriceExVat: unitPrice,
-        originalUnitPrice: item.originalUnitPrice ?? item.unitPriceExVat,
+        unitPrice: unitPrice,
+        originalUnitPrice: item.originalUnitPrice ?? item.unitPrice,
         lineTotal,
       })
       .where(eq(orderItems.id, item.id));
@@ -127,7 +127,7 @@ export async function POST(
 
   await db.update(orders)
     .set({
-      totalExVat: newTotal,
+      total: newTotal,
       status: "quoted",
       stockCheckedAt: now,
       quotedAt: now,

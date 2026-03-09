@@ -31,7 +31,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       cardrushJpy: cards.cardrushJpy,
       cardrushUrl: cards.cardrushUrl,
       quantity: orderItems.quantity,
-      unitPriceExVat: orderItems.unitPriceExVat,
+      unitPrice: orderItems.unitPrice,
       lineTotal: orderItems.lineTotal,
       stockStatus: orderItems.stockStatus,
       removedAt: orderItems.removedAt,
@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const body = await req.json() as {
     items: {
       id: number;
-      unitPriceExVat: number;
+      unitPrice: number;
       quantity: number;
       available: boolean;
     }[];
@@ -89,12 +89,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const [current] = await db.select().from(orderItems).where(eq(orderItems.id, item.id)).limit(1);
     if (!current) continue;
 
-    const lineTotal = Math.round(item.unitPriceExVat * item.quantity * 100) / 100;
+    const lineTotal = Math.round(item.unitPrice * item.quantity * 100) / 100;
     await db.update(orderItems)
       .set({
-        unitPriceExVat: item.unitPriceExVat,
+        unitPrice: item.unitPrice,
         quantity: item.quantity,
-        originalUnitPrice: current.originalUnitPrice ?? current.unitPriceExVat,
+        originalUnitPrice: current.originalUnitPrice ?? current.unitPrice,
         lineTotal,
       })
       .where(eq(orderItems.id, item.id));
@@ -112,7 +112,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   await db.update(orders)
     .set({
-      totalExVat: Math.round(total * 100) / 100,
+      total: Math.round(total * 100) / 100,
       ...(isNewQuote ? { status: "quoted" } : {}),
       adminNotes: body.adminNotes || null,
       quotedAt,

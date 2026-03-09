@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
           cardrushJpy: jpyPrice,
           gbpJpyRate: rate,
           baseGbp: price.baseGbp,
-          priceExVat: price.priceExVat,
+          price: price.price,
           lastSyncedAt: now,
         })
         .onConflictDoUpdate({
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
             cardrushJpy: jpyPrice,
             gbpJpyRate: rate,
             baseGbp: price.baseGbp,
-            priceExVat: price.priceExVat,
+            price: price.price,
             lastSyncedAt: now,
           },
         });

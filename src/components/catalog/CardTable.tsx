@@ -18,6 +18,7 @@ interface CardRow {
   rarity: string | null;
   imageUrl: string | null;
   stock: number;
+  pendingStock: number;
 }
 
 export default function CardTable({
@@ -183,6 +184,11 @@ export default function CardTable({
                 </td>
                 <td className={`px-2 md:px-4 py-3 text-right ${card.stock > 0 ? "text-green-400" : "text-gray-500"}`}>
                   {card.stock}
+                  {card.pendingStock > 0 && (
+                    <span className="ml-1 text-yellow-500 text-xs" title="Pending delivery">
+                      (+{card.pendingStock})
+                    </span>
+                  )}
                 </td>
                 <td className="px-2 md:px-4 py-3 text-right">
                   {volumeDiscountPct > 0 ? (

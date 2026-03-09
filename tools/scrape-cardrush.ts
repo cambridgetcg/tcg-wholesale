@@ -274,16 +274,14 @@ async function upsertToDb(
         category: "singles",
         rarity: card.rarity ?? null,
         image_url: card.imageUrl ?? null,
-        stock: card.stock,
       }));
 
-      // Batch upsert cards
+      // Batch upsert cards (stock is derived from UK purchases, not scraped)
       await sql`
         INSERT INTO cards ${sql(cardRows,
           "card_number", "sku", "name", "set_code", "set_name",
           "cardrush_url", "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price",
-          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url",
-          "stock"
+          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url"
         )}
         ON CONFLICT (sku) DO UPDATE SET
           name = EXCLUDED.name,
@@ -298,8 +296,7 @@ async function upsertToDb(
           game_id = EXCLUDED.game_id,
           set_id = EXCLUDED.set_id,
           rarity = EXCLUDED.rarity,
-          image_url = EXCLUDED.image_url,
-          stock = EXCLUDED.stock`;
+          image_url = EXCLUDED.image_url`;
 
       // Batch select card IDs by SKU
       const skus = batch.map((c) => c.sku);
@@ -494,15 +491,13 @@ async function upsertSealedToDb(
         category: "sealed",
         rarity: null,
         image_url: card.imageUrl ?? null,
-        stock: card.stock,
       }));
 
       await sql`
         INSERT INTO cards ${sql(cardRows,
           "card_number", "sku", "name", "set_code", "set_name",
           "cardrush_url", "cardrush_jpy", "gbp_jpy_rate", "base_gbp", "price",
-          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url",
-          "stock"
+          "last_synced_at", "game_id", "set_id", "category", "rarity", "image_url"
         )}
         ON CONFLICT (sku) DO UPDATE SET
           name = EXCLUDED.name,
@@ -514,8 +509,7 @@ async function upsertSealedToDb(
           last_synced_at = EXCLUDED.last_synced_at,
           game_id = EXCLUDED.game_id,
           set_id = EXCLUDED.set_id,
-          image_url = EXCLUDED.image_url,
-          stock = EXCLUDED.stock`;
+          image_url = EXCLUDED.image_url`;
 
       // Price history
       const skus = batch.map((c) => c.sku);

@@ -10,7 +10,7 @@ interface Order {
   clientName: string | null;
   clientCompany: string | null;
   status: string;
-  totalExVat: number;
+  total: number;
   volumeDiscount: number;
   notes: string | null;
   createdAt: string | null;
@@ -26,7 +26,7 @@ interface OrderItemRow {
   cardrushJpy: number | null;
   cardrushUrl: string | null;
   quantity: number;
-  unitPriceExVat: number;
+  unitPrice: number;
   lineTotal: number;
   stockStatus: string | null;
   removedAt: string | null;
@@ -34,7 +34,7 @@ interface OrderItemRow {
 
 interface EditableItem {
   id: number;
-  unitPriceExVat: number;
+  unitPrice: number;
   quantity: number;
   available: boolean;
 }
@@ -106,7 +106,7 @@ export default function AdminOrdersPage() {
           ...prev,
           [orderId]: data.map((item) => ({
             id: item.id,
-            unitPriceExVat: item.unitPriceExVat,
+            unitPrice: item.unitPrice,
             quantity: item.quantity,
             available: !item.removedAt,
           })),
@@ -129,7 +129,7 @@ export default function AdminOrdersPage() {
     if (!edits) return 0;
     return edits
       .filter((e) => e.available)
-      .reduce((sum, e) => sum + Math.round(e.unitPriceExVat * e.quantity * 100) / 100, 0);
+      .reduce((sum, e) => sum + Math.round(e.unitPrice * e.quantity * 100) / 100, 0);
   }
 
   async function sendQuote(orderId: number) {
@@ -148,7 +148,7 @@ export default function AdminOrdersPage() {
       });
       // Refresh orders and clear edit state
       setOrders((prev) => prev.map((o) =>
-        o.id === orderId ? { ...o, status: order?.status === "submitted" ? "quoted" : o.status, totalExVat: getEditTotal(orderId) } : o
+        o.id === orderId ? { ...o, status: order?.status === "submitted" ? "quoted" : o.status, total: getEditTotal(orderId) } : o
       ));
       setEditItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
       setItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
@@ -170,12 +170,12 @@ export default function AdminOrdersPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status: "confirmed",
-          items: availableEdits.map((e) => ({ id: e.id, unitPriceExVat: e.unitPriceExVat })),
+          items: availableEdits.map((e) => ({ id: e.id, unitPrice: e.unitPrice })),
         }),
       });
       // Update local state
       setOrders((prev) => prev.map((o) =>
-        o.id === orderId ? { ...o, status: "confirmed", totalExVat: getEditTotal(orderId) } : o
+        o.id === orderId ? { ...o, status: "confirmed", total: getEditTotal(orderId) } : o
       ));
       setEditItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
       setItems((prev) => { const next = { ...prev }; delete next[orderId]; return next; });
@@ -249,7 +249,7 @@ export default function AdminOrdersPage() {
                     {order.clientCompany && <span className="ml-1 text-gray-500 text-xs">({order.clientCompany})</span>}
                   </td>
                   <td className="hidden md:table-cell px-4 py-3 text-gray-400">{order.createdAt ? new Date(order.createdAt).toLocaleDateString() : "\u2014"}</td>
-                  <td className="px-2 md:px-4 py-3 text-right font-medium">&pound;{order.totalExVat.toFixed(2)}</td>
+                  <td className="px-2 md:px-4 py-3 text-right font-medium">&pound;{order.total.toFixed(2)}</td>
                   <td className="px-2 md:px-4 py-3">
                     <StatusBadge status={order.status} />
                     {order.stockCheckedAt && (
@@ -324,7 +324,7 @@ export default function AdminOrdersPage() {
                             <tbody>
                               {items[order.id].map((item) => {
                                 const edit = editItems[order.id].find((e) => e.id === item.id)!;
-                                const lineTotal = Math.round(edit.unitPriceExVat * edit.quantity * 100) / 100;
+                                const lineTotal = Math.round(edit.unitPrice * edit.quantity * 100) / 100;
                                 return (
                                   <tr
                                     key={item.id}
@@ -354,8 +354,8 @@ export default function AdminOrdersPage() {
                                         type="number"
                                         step="0.01"
                                         min="0"
-                                        value={edit.unitPriceExVat}
-                                        onChange={(e) => updateEditItem(order.id, item.id, "unitPriceExVat", parseFloat(e.target.value) || 0)}
+                                        value={edit.unitPrice}
+                                        onChange={(e) => updateEditItem(order.id, item.id, "unitPrice", parseFloat(e.target.value) || 0)}
                                         disabled={!edit.available}
                                         className="w-20 rounded bg-[#1a1a2e] border border-[#2a2a3e] px-2 py-0.5 text-right text-xs focus:border-brand-500 focus:outline-none disabled:opacity-40"
                                       />
@@ -380,7 +380,7 @@ export default function AdminOrdersPage() {
                             <tfoot>
                               <tr className="border-t border-[#2a2a3e]">
                                 <td colSpan={6} className="py-2 text-right font-semibold text-gray-300">
-                                  Quoted Total (ex-VAT):
+                                  Quoted Total:
                                 </td>
                                 <td className="py-2 text-right font-bold text-green-400">
                                   £{getEditTotal(order.id).toFixed(2)}
@@ -515,7 +515,7 @@ export default function AdminOrdersPage() {
                                   )}
                                 </td>
                                 <td className="py-1 font-mono text-brand-500">{item.cardNumber}</td>
-                                <td className="py-1 text-right">&pound;{item.unitPriceExVat.toFixed(2)}</td>
+                                <td className="py-1 text-right">&pound;{item.unitPrice.toFixed(2)}</td>
                                 <td className="py-1 text-right">{item.quantity}</td>
                                 <td className="py-1 text-right font-medium">&pound;{item.lineTotal.toFixed(2)}</td>
                                 <td className={`py-1 text-left font-medium ${statusColor}`}>{statusLabel}</td>

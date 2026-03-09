@@ -30,7 +30,7 @@ export default async function StockCheckPage({ params }: { params: Promise<{ id:
       gbpJpyRate: cards.gbpJpyRate,
       category: cards.category,
       quantity: orderItems.quantity,
-      unitPriceExVat: orderItems.unitPriceExVat,
+      unitPrice: orderItems.unitPrice,
       lineTotal: orderItems.lineTotal,
       stockStatus: orderItems.stockStatus,
       checkedPriceJpy: orderItems.checkedPriceJpy,
@@ -46,8 +46,8 @@ export default async function StockCheckPage({ params }: { params: Promise<{ id:
     let currentCalcPrice: number | null = null;
     if (item.cardrushJpy && item.gbpJpyRate) {
       const current = calculatePriceByCategory(item.cardrushJpy, item.gbpJpyRate, item.category);
-      currentCalcPrice = current.priceExVat;
-      const diff = Math.abs(current.priceExVat - item.unitPriceExVat) / item.unitPriceExVat;
+      currentCalcPrice = current.price;
+      const diff = Math.abs(current.price - item.unitPrice) / item.unitPrice;
       if (diff > 0.05) priceDiffPct = diff;
     }
     return { ...item, priceDiffPct, currentCalcPrice };
@@ -59,7 +59,7 @@ export default async function StockCheckPage({ params }: { params: Promise<{ id:
         orderId={orderId}
         clientName={client?.name ?? `Client #${order.clientId}`}
         clientCompany={client?.company ?? null}
-        orderTotal={order.totalExVat}
+        orderTotal={order.total}
         items={itemsWithDiscrepancy}
       />
     </div>

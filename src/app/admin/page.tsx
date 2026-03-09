@@ -11,14 +11,14 @@ export default async function AdminDashboard() {
   const activeClients = await db.select().from(clients).where(eq(clients.role, "client"));
 
   const pendingOrders = allOrders.filter((o) => o.status === "submitted");
-  const pendingTotal = pendingOrders.reduce((sum, o) => sum + o.totalExVat, 0);
+  const pendingTotal = pendingOrders.reduce((sum, o) => sum + o.total, 0);
 
   const monthRevenue = allOrders
     .filter((o) =>
       ["paid", "ordered", "shipped", "delivered"].includes(o.status) &&
       o.createdAt != null && o.createdAt >= monthStart
     )
-    .reduce((sum, o) => sum + o.totalExVat, 0);
+    .reduce((sum, o) => sum + o.total, 0);
 
   const lastSync = await db
     .select({ lastSyncedAt: cards.lastSyncedAt })
@@ -29,7 +29,7 @@ export default async function AdminDashboard() {
 
   const stats = [
     { label: "Pending Orders", value: pendingOrders.length, sub: `£${pendingTotal.toFixed(2)} total` },
-    { label: "This Month Revenue", value: `£${monthRevenue.toFixed(2)}`, sub: "ex-VAT" },
+    { label: "This Month Revenue", value: `£${monthRevenue.toFixed(2)}`, sub: "inc. VAT" },
     { label: "Active Clients", value: activeClients.length, sub: null },
     { label: "Last Price Sync", value: lastSyncTime ? lastSyncTime.toLocaleDateString() : "Never", sub: lastSyncTime ? lastSyncTime.toLocaleTimeString() : null },
   ];
@@ -79,7 +79,7 @@ export default async function AdminDashboard() {
               >
                 <span>Order #{order.id}</span>
                 <span className="text-sm text-gray-400">{order.status}</span>
-                <span className="font-medium text-green-400">£{order.totalExVat.toFixed(2)}</span>
+                <span className="font-medium text-green-400">£{order.total.toFixed(2)}</span>
               </Link>
             ))}
           </div>

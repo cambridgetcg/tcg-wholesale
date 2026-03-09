@@ -1,31 +1,31 @@
-export const VAT_RATE = 0.20;
 export const MARGIN_PCT = 0.22;
 export const PER_CARD_FEE = 0.22;
 export const SEALED_MARGIN_PCT = 0.18;
 export const SEALED_FLAT_FEE = 2.20;
+export const VAT_MULTIPLIER = 1.20;
 
 export interface PriceBreakdown {
   baseGbp: number;
-  priceExVat: number;
+  price: number;
 }
 
 export function calculatePrice(cardrushJpy: number, gbpJpyRate: number): PriceBreakdown {
   const baseGbp = cardrushJpy / gbpJpyRate;
-  const priceExVat = baseGbp * (1 + MARGIN_PCT) + PER_CARD_FEE;
+  const price = (baseGbp * (1 + MARGIN_PCT) + PER_CARD_FEE) * VAT_MULTIPLIER;
 
   return {
     baseGbp: round2(baseGbp),
-    priceExVat: round2(priceExVat),
+    price: round2(price),
   };
 }
 
 export function calculateSealedPrice(cardrushJpy: number, gbpJpyRate: number): PriceBreakdown {
   const baseGbp = cardrushJpy / gbpJpyRate;
-  const priceExVat = baseGbp * (1 + SEALED_MARGIN_PCT) + SEALED_FLAT_FEE;
+  const price = (baseGbp * (1 + SEALED_MARGIN_PCT) + SEALED_FLAT_FEE) * VAT_MULTIPLIER;
 
   return {
     baseGbp: round2(baseGbp),
-    priceExVat: round2(priceExVat),
+    price: round2(price),
   };
 }
 
@@ -39,8 +39,8 @@ export function calculatePriceByCategory(
     : calculatePrice(cardrushJpy, gbpJpyRate);
 }
 
-export function applyVolumeDiscount(priceExVat: number, discountFraction: number): number {
-  return round2(priceExVat * (1 - discountFraction));
+export function applyVolumeDiscount(price: number, discountFraction: number): number {
+  return round2(price * (1 - discountFraction));
 }
 
 function round2(n: number): number {

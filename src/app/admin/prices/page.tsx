@@ -9,7 +9,7 @@ interface CardRow {
   name: string | null;
   setCode: string | null;
   cardrushJpy: number | null;
-  priceExVat: number | null;
+  price: number | null;
   lastSyncedAt: string | null;
 }
 
@@ -70,9 +70,9 @@ export default function AdminPricesPage() {
     await fetch(`/api/cards/${cardId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ priceExVat: price }),
+      body: JSON.stringify({ price: price }),
     });
-    setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, priceExVat: price } : c)));
+    setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, price: price } : c)));
     setEditingId(null);
   }
 
@@ -175,7 +175,7 @@ export default function AdminPricesPage() {
               <th className="px-4 py-3 font-medium">Card #</th>
               <th className="px-4 py-3 font-medium">Set</th>
               <th className="px-4 py-3 font-medium text-right">JPY</th>
-              <th className="px-4 py-3 font-medium text-right">Price (ex-VAT)</th>
+              <th className="px-4 py-3 font-medium text-right">Price</th>
               <th className="px-4 py-3 font-medium">Last Synced</th>
             </tr>
           </thead>
@@ -206,10 +206,10 @@ export default function AdminPricesPage() {
                     </span>
                   ) : (
                     <span
-                      onClick={() => { setEditingId(card.id); setEditPrice(String(card.priceExVat ?? 0)); }}
+                      onClick={() => { setEditingId(card.id); setEditPrice(String(card.price ?? 0)); }}
                       className="cursor-pointer font-medium hover:text-brand-500 transition"
                     >
-                      £{(card.priceExVat ?? 0).toFixed(2)}
+                      £{(card.price ?? 0).toFixed(2)}
                     </span>
                   )}
                 </td>

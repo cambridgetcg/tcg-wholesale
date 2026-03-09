@@ -7,7 +7,7 @@ export interface ItemSnapshot {
   cardId: number;
   cardNumber: string;
   quantity: number;
-  unitPriceExVat: number;
+  unitPrice: number;
   originalUnitPrice: number | null;
   lineTotal: number;
   stockStatus: string;
@@ -25,7 +25,7 @@ export async function captureItemsSnapshot(orderId: number): Promise<ItemSnapsho
       cardId: orderItems.cardId,
       cardNumber: sql<string>`coalesce(${cards.cardNumber}, 'Unknown')`.as("card_number"),
       quantity: orderItems.quantity,
-      unitPriceExVat: orderItems.unitPriceExVat,
+      unitPrice: orderItems.unitPrice,
       originalUnitPrice: orderItems.originalUnitPrice,
       lineTotal: orderItems.lineTotal,
       stockStatus: orderItems.stockStatus,
@@ -40,7 +40,7 @@ export async function captureItemsSnapshot(orderId: number): Promise<ItemSnapsho
     cardId: i.cardId,
     cardNumber: i.cardNumber,
     quantity: i.quantity,
-    unitPriceExVat: i.unitPriceExVat,
+    unitPrice: i.unitPrice,
     originalUnitPrice: i.originalUnitPrice,
     lineTotal: i.lineTotal,
     stockStatus: i.stockStatus,

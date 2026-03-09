@@ -197,13 +197,13 @@ async function createCard(item: ManifestItem, cardrushUrl: string): Promise<numb
 
   const gbpJpyRate = 191.0; // approximate current rate
   const baseGbp = Math.round((cardrushJpy / gbpJpyRate) * 100) / 100;
-  const priceExVat = Math.round((baseGbp * 1.22 + 0.22) * 100) / 100;
+  const price = Math.round((baseGbp * 1.22 + 0.22) * 1.20 * 100) / 100;
 
   const [newCard] = await sql`
     INSERT INTO cards (card_number, sku, name, set_code, cardrush_url, cardrush_jpy,
-                       gbp_jpy_rate, base_gbp, price_ex_vat, game_id, set_id, category)
+                       gbp_jpy_rate, base_gbp, price, game_id, set_id, category)
     VALUES (${item.card_number}, ${sku}, ${item.name}, ${item.set_code}, ${cardrushUrl},
-            ${cardrushJpy}, ${gbpJpyRate}, ${baseGbp}, ${priceExVat}, ${game.id},
+            ${cardrushJpy}, ${gbpJpyRate}, ${baseGbp}, ${price}, ${game.id},
             ${setId}, 'singles')
     RETURNING id
   `;

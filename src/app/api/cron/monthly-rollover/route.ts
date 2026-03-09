@@ -6,7 +6,7 @@ import { eq, sql, and, inArray, gte } from "drizzle-orm";
 /**
  * Recalculates volume discount spend for all clients using a rolling 30-day window.
  *
- * - prior_month_spend   = SUM(total_ex_vat) of paid+ orders created in the last 30 days
+ * - prior_month_spend   = SUM(total) of paid+ orders created in the last 30 days
  *                         (this is the discount basis — read by calcDiscountPct)
  * - current_month_spend = same value (displayed on discount page)
  *
@@ -56,7 +56,7 @@ async function recalculateAllClients() {
 
   for (const client of allClients) {
     const [row] = await db
-      .select({ total: sql<number>`coalesce(sum(${orders.totalExVat}), 0)`.as("total") })
+      .select({ total: sql<number>`coalesce(sum(${orders.total}), 0)`.as("total") })
       .from(orders)
       .where(
         and(

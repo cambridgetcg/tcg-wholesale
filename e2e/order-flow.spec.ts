@@ -37,7 +37,8 @@ test.describe("Order processing flow", () => {
     await firstAddBtn.click();
 
     // Wait for cart badge to appear in nav (confirms cart context updated)
-    await expect(page.locator('a[href="/orders/new"]')).toBeVisible({
+    // Both mobile + desktop cart links render when itemCount > 0; check DOM presence
+    await expect(page.locator('a[href="/orders/new"]').first()).toBeAttached({
       timeout: 5_000,
     });
 
@@ -182,9 +183,17 @@ test.describe("Order processing flow", () => {
     // Verify status badge shows "Quoted"
     await expect(orderRow.locator("text=Quoted")).toBeVisible();
 
-    // Advance through each status
+    // Quoted → Confirmed: expand the row and click "Confirm Order" in the quote editor
+    await orderRow.click();
+    const confirmBtn = page.locator('button:has-text("Confirm Order")');
+    await expect(confirmBtn).toBeVisible({ timeout: 10_000 });
+    await confirmBtn.click();
+    // Row collapses; wait for status to update
+    await expect(orderRow.locator("text=Confirmed")).toBeVisible({ timeout: 10_000 });
+    console.log(`Order #${orderId}: → Confirmed`);
+
+    // Remaining transitions use row-level action buttons
     const transitions = [
-      { button: "Mark Confirmed", expected: "Confirmed" },
       { button: "Mark Paid", expected: "Paid" },
       { button: "Mark Ordered", expected: "Ordered" },
       { button: "Mark Shipped", expected: "Shipped" },

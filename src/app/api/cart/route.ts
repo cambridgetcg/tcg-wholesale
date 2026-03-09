@@ -22,7 +22,7 @@ export async function GET() {
       name: r.cardName,
       setCode: r.setCode,
       setName: r.setName,
-      priceExVat: r.priceExVat,
+      price: r.price,
     },
     quantity: r.quantity,
   }));
@@ -44,7 +44,7 @@ export async function PUT(req: NextRequest) {
         name: string;
         setCode: string | null;
         setName: string | null;
-        priceExVat: number;
+        price: number;
       };
       quantity: number;
     }[];
@@ -70,7 +70,7 @@ export async function PUT(req: NextRequest) {
           cardName: item.card.name,
           setCode: item.card.setCode,
           setName: item.card.setName,
-          priceExVat: item.card.priceExVat,
+          price: item.card.price,
           addedAt: now,
           updatedAt: now,
         }))

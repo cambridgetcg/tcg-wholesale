@@ -1,11 +1,10 @@
 import { db } from "@/lib/db";
-import { orders, orderItems, cards } from "@/lib/db/schema";
-import { eq, sql, isNull } from "drizzle-orm";
+import { orders, orderItems, cards, fulfillmentEntries } from "@/lib/db/schema";
+import { eq, sql, isNull, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Nav from "@/components/Nav";
 import StatusBadge from "@/components/StatusBadge";
-import { VAT_RATE } from "@/lib/pricing";
 import OrderItemsTable from "./OrderItemsTable";
 
 const statusSteps = ["submitted", "quoted", "confirmed", "paid", "ordered", "shipped", "delivered"];
@@ -27,7 +26,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     .select({
       id: orderItems.id,
       quantity: orderItems.quantity,
-      unitPriceExVat: orderItems.unitPriceExVat,
+      unitPrice: orderItems.unitPrice,
       originalUnitPrice: orderItems.originalUnitPrice,
       lineTotal: orderItems.lineTotal,
       cardNumber: sql<string>`coalesce(${cards.cardNumber}, 'Unknown')`.as("card_number"),
@@ -38,6 +37,25 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     .leftJoin(cards, eq(orderItems.cardId, cards.id))
     .where(sql`${orderItems.orderId} = ${orderId} AND ${orderItems.removedAt} IS NULL`);
 
+  // Fulfillment data for confirmed+ orders
+  const showFulfillment = ["confirmed", "paid", "ordered", "shipped", "delivered"].includes(order.status);
+  let fulfilledMap: Record<number, number> | undefined;
+  if (showFulfillment) {
+    const fulfilledAgg = await db
+      .select({
+        orderItemId: fulfillmentEntries.orderItemId,
+        total: sql<number>`sum(${fulfillmentEntries.fulfilledQty})`.as("total"),
+      })
+      .from(fulfillmentEntries)
+      .where(eq(fulfillmentEntries.orderId, orderId))
+      .groupBy(fulfillmentEntries.orderItemId);
+
+    fulfilledMap = {};
+    for (const row of fulfilledAgg) {
+      fulfilledMap[row.orderItemId] = Number(row.total);
+    }
+  }
+
   const isCancelled = order.status === "cancelled";
   const currentIdx = isCancelled ? -1 : statusSteps.indexOf(order.status);
   const isQuoted = order.status === "quoted";
@@ -46,11 +64,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   // Compute full totals
   const discountPct = order.volumeDiscount;
   const preDiscountSubtotal = discountPct > 0
-    ? Math.round((order.totalExVat / (1 - discountPct)) * 100) / 100
-    : order.totalExVat;
-  const discountAmount = Math.round((preDiscountSubtotal - order.totalExVat) * 100) / 100;
-  const vat = Math.round(order.totalExVat * VAT_RATE * 100) / 100;
-  const totalIncVat = Math.round((order.totalExVat + vat) * 100) / 100;
+    ? Math.round((order.total / (1 - discountPct)) * 100) / 100
+    : order.total;
+  const discountAmount = Math.round((preDiscountSubtotal - order.total) * 100) / 100;
 
   return (
     <>
@@ -102,7 +118,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Items table */}
-          <OrderItemsTable items={items} />
+          <OrderItemsTable items={items} fulfilledMap={fulfilledMap} />
 
           {/* Summary sidebar */}
           <div className="rounded-lg border border-[#1e1e2e] bg-[#12121a] p-4 space-y-4">
@@ -119,17 +135,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                   <span>-&pound;{discountAmount.toFixed(2)}</span>
                 </div>
               )}
-              <div className="border-t border-[#1e1e2e] pt-2 flex justify-between font-medium">
-                <span>Total ex-VAT</span>
-                <span>&pound;{order.totalExVat.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-gray-400">
-                <span>VAT (20%)</span>
-                <span>&pound;{vat.toFixed(2)}</span>
-              </div>
               <div className="border-t border-[#1e1e2e] pt-2 flex justify-between text-lg font-bold">
-                <span>Total inc VAT</span>
-                <span className="text-green-400">&pound;{totalIncVat.toFixed(2)}</span>
+                <span>Total</span>
+                <span className="text-green-400">&pound;{order.total.toFixed(2)}</span>
               </div>
             </div>
 

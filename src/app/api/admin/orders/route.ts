@@ -17,7 +17,7 @@ export async function GET() {
       clientName: clients.name,
       clientCompany: clients.company,
       status: orders.status,
-      totalExVat: orders.totalExVat,
+      total: orders.total,
       volumeDiscount: orders.volumeDiscount,
       notes: orders.notes,
       stockCheckedAt: orders.stockCheckedAt,

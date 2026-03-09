@@ -1,6 +1,7 @@
 """Order Fulfillment Tool — Enter fulfilled quantities, persist to DB, print clean forms."""
 
 import io
+import unicodedata
 from collections import defaultdict
 from datetime import date
 
@@ -8,6 +9,16 @@ import psycopg2
 import psycopg2.extras
 import streamlit as st
 from fpdf import FPDF
+
+
+def _trunc(text: str, max_width: int) -> str:
+    """Truncate text to max_width display columns (CJK chars count as 2)."""
+    w = 0
+    for i, ch in enumerate(text):
+        w += 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+        if w > max_width:
+            return text[:i] + "…"
+    return text
 
 DATABASE_URL = "postgresql://postgres:***REMOVED-ROTATE-ME***@tcg-wholesale.cn4c2su0o42n.us-east-1.rds.amazonaws.com:5432/wholesale?sslmode=require"
 
@@ -94,7 +105,7 @@ def load_fulfillment_history(order_id: int) -> list[dict]:
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute("""
         SELECT fe.fulfillment_date, fe.fulfilled_qty, fe.created_at,
-               ca.card_number, ca.name AS card_name, ca.set_code
+               ca.card_number, ca.sku, ca.set_code
         FROM fulfillment_entries fe
         JOIN order_items oi ON fe.order_item_id = oi.id
         JOIN cards ca ON oi.card_id = ca.id
@@ -195,7 +206,7 @@ def build_history_pdf(
         by_date[row["fulfillment_date"]].append(row)
 
     # Column widths — scale to full page width
-    # Card # | Card Name | Set | Qty
+    # Card # | SKU | Set | Qty
     col_ratios = [0.14, 0.62, 0.12, 0.12]
     col_w = [page_w * r for r in col_ratios]
     row_h = 7
@@ -204,7 +215,7 @@ def build_history_pdf(
         """Draw the column header row."""
         pdf.set_font("jp", "B", 10)
         pdf.set_fill_color(235, 235, 235)
-        for w, label in zip(col_w, ["Card #", "Card Name", "Set", "Qty"]):
+        for w, label in zip(col_w, ["Card #", "SKU", "Set", "Qty"]):
             pdf.cell(w, row_h, f" {label}", border=1, fill=True)
         pdf.ln()
 
@@ -236,16 +247,16 @@ def build_history_pdf(
                 pdf.set_font("jp", "", 10)
 
             card_num = r["card_number"] or "-"
-            card_name = r["card_name"] or "-"
+            sku = r["sku"] or "-"
             set_code = r["set_code"] or "-"
             qty = str(r["fulfilled_qty"])
 
-            # Truncate long card names
+            # Truncate long SKU
             max_name_w = col_w[1] - 4
-            if pdf.get_string_width(card_name) > max_name_w:
-                while pdf.get_string_width(card_name + "...") > max_name_w and len(card_name) > 0:
-                    card_name = card_name[:-1]
-                card_name += "..."
+            if pdf.get_string_width(sku) > max_name_w:
+                while pdf.get_string_width(sku + "...") > max_name_w and len(sku) > 0:
+                    sku = sku[:-1]
+                sku += "..."
 
             # Alternate row colour
             if i % 2 == 1:
@@ -255,7 +266,7 @@ def build_history_pdf(
                 fill = False
 
             pdf.cell(col_w[0], row_h, f" {card_num}", border="LR", fill=fill)
-            pdf.cell(col_w[1], row_h, f" {card_name}", border="LR", fill=fill)
+            pdf.cell(col_w[1], row_h, f" {sku}", border="LR", fill=fill)
             pdf.cell(col_w[2], row_h, f" {set_code}", border="LR", fill=fill)
             pdf.cell(col_w[3], row_h, f" {qty}", border="LR", fill=fill, align="C")
             pdf.ln()
@@ -324,6 +335,16 @@ st.markdown("""
 }
 .lightbox-overlay img { width: 400px; border-radius: 8px; box-shadow: 0 4px 30px rgba(0,0,0,0.5); }
 .lightbox-overlay:target { display: flex; }
+
+/* Zebra-stripe rows in form and history expanders */
+[data-testid="stForm"] [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"]:nth-child(even),
+[data-testid="stForm"] [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"]:nth-child(even) *:not(input):not(button) {
+    background-color: #e2e8f0 !important;
+}
+[data-testid="stExpanderDetails"] [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"]:nth-child(even),
+[data-testid="stExpanderDetails"] [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"]:nth-child(even) *:not(input):not(button) {
+    background-color: #e2e8f0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -416,7 +437,7 @@ with tab_entry:
                 cols[0].text("—")
 
             cols[1].text(item["card_number"] or "—")
-            cols[2].text(item["name"] or "—")
+            cols[2].text(_trunc(item["name"] or "—", 26))
             cols[3].text(item["set_code"] or "—")
             cols[4].text(str(ordered))
             cols[5].text(str(prev_other))
@@ -516,13 +537,14 @@ with tab_history:
             with st.expander(f"{d}  —  {day_total} cards  ({len(rows)} items)", expanded=(d == dates[0])):
                 hdr = st.columns([1.5, 3, 1.5, 1])
                 hdr[0].markdown("**Card #**")
-                hdr[1].markdown("**Card Name**")
+                hdr[1].markdown("**SKU**")
                 hdr[2].markdown("**Set**")
                 hdr[3].markdown("**Qty**")
 
                 for r in rows:
                     cols = st.columns([1.5, 3, 1.5, 1])
                     cols[0].text(r["card_number"] or "—")
-                    cols[1].text(r["card_name"] or "—")
+                    cols[1].text(r["sku"] or "—")
                     cols[2].text(r["set_code"] or "—")
                     cols[3].text(str(r["fulfilled_qty"]))
+

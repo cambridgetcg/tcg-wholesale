@@ -18,7 +18,7 @@ def load_cards() -> pd.DataFrame:
     cur.execute("""
         SELECT
             c.id, c.sku, c.card_number, c.name, c.set_code, c.set_name,
-            c.cardrush_jpy, c.gbp_jpy_rate, c.base_gbp, c.price_ex_vat,
+            c.cardrush_jpy, c.gbp_jpy_rate, c.base_gbp, c.price,
             c.image_url, c.cardrush_url, c.last_synced_at,
             c.category, c.product_type
         FROM cards c
@@ -104,12 +104,12 @@ if stats["cards"] == 0:
 df = load_cards()
 
 # Cast Decimal columns to float
-for col in ["base_gbp", "price_ex_vat"]:
+for col in ["base_gbp", "price"]:
     if col in df.columns:
         df[col] = df[col].apply(lambda x: float(x) if x is not None else None)
 
-# Compute inc-VAT
-df["price_inc_vat"] = df["price_ex_vat"] * 1.2
+# Price already includes VAT
+df["price_inc_vat"] = df["price"]
 
 # Detect parallel from SKU suffix (-P1, -P2, etc.)
 df["is_parallel"] = df["sku"].str.contains(r"-P\d+$", regex=True)
@@ -169,8 +169,8 @@ set_summary = (
         Parallel=("is_parallel", "sum"),
         Min_JPY=("cardrush_jpy", "min"),
         Max_JPY=("cardrush_jpy", "max"),
-        Avg_GBP=("price_ex_vat", "mean"),
-        Total_GBP=("price_ex_vat", "sum"),
+        Avg_GBP=("price", "mean"),
+        Total_GBP=("price", "sum"),
     )
     .sort_index()
 )
@@ -192,7 +192,7 @@ st.subheader("Card Catalog")
 
 display = filtered[[
     "image_url", "sku", "card_number", "name", "set_code", "type",
-    "cardrush_jpy", "price_ex_vat", "price_inc_vat", "cardrush_url",
+    "cardrush_jpy", "price", "price_inc_vat", "cardrush_url",
 ]].copy()
 
 display.columns = [
@@ -222,7 +222,7 @@ chart_col1, chart_col2 = st.columns(2)
 
 with chart_col1:
     st.caption("Avg GBP by Set")
-    set_avg = filtered.groupby("set_code")["price_ex_vat"].mean().sort_values(ascending=False)
+    set_avg = filtered.groupby("set_code")["price"].mean().sort_values(ascending=False)
     st.bar_chart(set_avg, x_label="Set", y_label="Avg GBP Ex-VAT")
 
 with chart_col2:

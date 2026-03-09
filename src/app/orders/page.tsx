@@ -29,7 +29,7 @@ export default async function OrdersPage() {
     .select({
       id: orders.id,
       status: orders.status,
-      totalExVat: orders.totalExVat,
+      total: orders.total,
       volumeDiscount: orders.volumeDiscount,
       createdAt: orders.createdAt,
       clientId: orders.clientId,
@@ -82,7 +82,7 @@ export default async function OrdersPage() {
                   </td>
                   <td className="hidden md:table-cell px-4 py-3 text-right text-gray-400">{order.itemCount}</td>
                   <td className="px-2 md:px-4 py-3 text-right font-medium">
-                    &pound;{order.totalExVat.toFixed(2)}
+                    &pound;{order.total.toFixed(2)}
                   </td>
                   <td className="px-2 md:px-4 py-3"><StatusBadge status={order.status} /></td>
                   <td className="hidden md:table-cell px-4 py-3 text-right">
