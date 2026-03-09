@@ -159,12 +159,12 @@ function parseOrderText(text: string, cardrushLinks: string[], orderId: string):
 
   // Status — "Status:\tshipped (DD.MM.YYYY)"
   let status = "ordered";
-  const statusMatch = text.match(/Status:\s*(shipped|received|ordered|delivered|processing|purchase process)/i);
+  const statusMatch = text.match(/Status:\s*(shipped|received|ordered|delivered|processing|purchase process|Remambo warehouse)/i);
   if (statusMatch) {
     const s = statusMatch[1].toLowerCase();
     if (s === "shipped" || s === "delivered") status = "shipped";
     else if (s === "received") status = "received";
-    // "purchase process" and "processing" both map to "ordered"
+    // "purchase process", "processing", "remambo warehouse" all map to "ordered"
   }
 
   // Parcel ID — "Parcel:\tZ-XXXXXX"
@@ -230,11 +230,17 @@ function parseOrderText(text: string, cardrushLinks: string[], orderId: string):
       continue;
     }
 
-    // Format A: "Order #31 — EB01-003 PROMO" comment line
+    // Format A: "Order #31 — EB01-003 PROMO" or "Stock buy — P-003 PROMO" comment line
     const orderLineMatch = line.match(/^Order #(\d+)\s*[—–-]\s*([A-Z][A-Z0-9]*(?:-\d+)?)\s+(.*)?$/);
-    if (orderLineMatch) {
-      currentOrderId = parseInt(orderLineMatch[1]);
-      currentCardNumber = orderLineMatch[2];
+    const stockBuyMatch = !orderLineMatch ? line.match(/^Stock buy\s*[—–-]\s*([A-Z][A-Z0-9]*(?:-\d+)?)\s+(.*)?$/) : null;
+    if (orderLineMatch || stockBuyMatch) {
+      if (orderLineMatch) {
+        currentOrderId = parseInt(orderLineMatch[1]);
+        currentCardNumber = orderLineMatch[2];
+      } else if (stockBuyMatch) {
+        currentOrderId = null;
+        currentCardNumber = stockBuyMatch[1];
+      }
       // Title is the previous non-empty line (the card name line before this)
       if (!currentTitle) {
         for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
@@ -603,7 +609,11 @@ async function main() {
 
     console.log(`\n  Inserted purchase id=${purchase.id}`);
 
-    // Insert purchase items
+    // Split resolved items into Mint (auto-match) and A- (needs review)
+    const mintItems = resolved.filter((r) => !r.condition.startsWith("状態"));
+    const reviewItems = resolved.filter((r) => r.condition.startsWith("状態"));
+
+    // Insert all purchase items (both Mint and A-)
     for (const item of resolved) {
       await sql`
         INSERT INTO purchase_items (purchase_id, card_id, order_item_id, condition, quantity, unit_price_jpy, cardrush_url)
@@ -611,13 +621,21 @@ async function main() {
                 ${item.unitPriceJpy}, ${item.cardrushUrl})
       `;
       const oiTag = item.orderItemId ? ` → oi=${item.orderItemId}` : "";
-      console.log(`    ${item.cardNumber} x${item.quantity} (${item.condition}) → card_id=${item.cardId}${oiTag}`);
+      const reviewTag = item.condition.startsWith("状態") ? " ⚠ FOR REVIEW" : "";
+      console.log(`    ${item.cardNumber} x${item.quantity} (${item.condition}) → card_id=${item.cardId}${oiTag}${reviewTag}`);
     }
 
-    // Sync UK stock + pending stock for affected cards
-    const cardIds = resolved.map((r) => r.cardId);
+    if (reviewItems.length > 0) {
+      console.log(`\n  ⚠ ${reviewItems.length} A- condition items need review (not counted in stock):`);
+      for (const item of reviewItems) {
+        console.log(`    ${item.cardNumber} ${item.name.slice(0, 40)} x${item.quantity} (${item.condition}) ¥${item.unitPriceJpy}`);
+      }
+    }
+
+    // Sync UK stock + pending stock — only Mint items affect stock counts
+    const cardIds = mintItems.map((r) => r.cardId);
     if (cardIds.length > 0) {
-      // On-hand: only received purchases minus fulfilled
+      // On-hand: only received purchases minus fulfilled (exclude A- condition)
       await sql`
         UPDATE cards c
         SET stock = COALESCE(uk.qty, 0)
@@ -630,12 +648,12 @@ async function main() {
             ), 0)::int AS qty
           FROM purchase_items pi
           JOIN purchases pu ON pu.id = pi.purchase_id
-          WHERE pu.status = 'received'
+          WHERE pu.status = 'received' AND pi.condition NOT LIKE '状態%'
           GROUP BY pi.card_id
         ) uk
         WHERE c.id = uk.card_id AND c.id = ANY(${cardIds})
       `;
-      // Pending: ordered/shipped but not received
+      // Pending: ordered/shipped but not received (exclude A- condition)
       await sql`
         UPDATE cards c
         SET pending_stock = COALESCE(pk.qty, 0)
@@ -643,7 +661,7 @@ async function main() {
           SELECT pi.card_id, SUM(pi.quantity)::int AS qty
           FROM purchase_items pi
           JOIN purchases pu ON pu.id = pi.purchase_id
-          WHERE pu.status IN ('ordered', 'shipped')
+          WHERE pu.status IN ('ordered', 'shipped') AND pi.condition NOT LIKE '状態%'
           GROUP BY pi.card_id
         ) pk
         WHERE c.id = pk.card_id AND c.id = ANY(${cardIds})

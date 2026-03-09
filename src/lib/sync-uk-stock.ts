@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 export async function syncUkStock(cardIds?: number[]) {
   const scope = cardIds?.length ? sql`AND c.id = ANY(${cardIds})` : sql``;
 
-  // On-hand stock: only purchases with status = 'received'
+  // On-hand stock: only received Mint purchases (exclude A- condition)
   await db.execute(sql`
     UPDATE cards c
     SET stock = COALESCE(uk.qty_on_hand, 0)
@@ -22,7 +22,7 @@ export async function syncUkStock(cardIds?: number[]) {
         SELECT pi.card_id, SUM(pi.quantity) AS qty_purchased
         FROM purchase_items pi
         JOIN purchases pu ON pu.id = pi.purchase_id
-        WHERE pu.status = 'received'
+        WHERE pu.status = 'received' AND pi.condition NOT LIKE '状態%'
         GROUP BY pi.card_id
       ) p
       LEFT JOIN (
@@ -36,19 +36,19 @@ export async function syncUkStock(cardIds?: number[]) {
     WHERE c.id = uk.card_id ${scope}
   `);
 
-  // Zero out on-hand for cards with no received purchases
+  // Zero out on-hand for cards with no received Mint purchases
   await db.execute(sql`
     UPDATE cards SET stock = 0
     WHERE stock != 0
     AND id NOT IN (
       SELECT pi.card_id FROM purchase_items pi
       JOIN purchases pu ON pu.id = pi.purchase_id
-      WHERE pu.status = 'received'
+      WHERE pu.status = 'received' AND pi.condition NOT LIKE '状態%'
     )
     ${scope}
   `);
 
-  // Pending stock: ordered or shipped (not yet received)
+  // Pending stock: ordered or shipped Mint only (exclude A- condition)
   await db.execute(sql`
     UPDATE cards c
     SET pending_stock = COALESCE(pk.qty_pending, 0)
@@ -56,20 +56,20 @@ export async function syncUkStock(cardIds?: number[]) {
       SELECT pi.card_id, SUM(pi.quantity)::int AS qty_pending
       FROM purchase_items pi
       JOIN purchases pu ON pu.id = pi.purchase_id
-      WHERE pu.status IN ('ordered', 'shipped')
+      WHERE pu.status IN ('ordered', 'shipped') AND pi.condition NOT LIKE '状態%'
       GROUP BY pi.card_id
     ) pk
     WHERE c.id = pk.card_id ${scope}
   `);
 
-  // Zero out pending for cards with no ordered/shipped purchases
+  // Zero out pending for cards with no ordered/shipped Mint purchases
   await db.execute(sql`
     UPDATE cards SET pending_stock = 0
     WHERE pending_stock != 0
     AND id NOT IN (
       SELECT pi.card_id FROM purchase_items pi
       JOIN purchases pu ON pu.id = pi.purchase_id
-      WHERE pu.status IN ('ordered', 'shipped')
+      WHERE pu.status IN ('ordered', 'shipped') AND pi.condition NOT LIKE '状態%'
     )
     ${scope}
   `);

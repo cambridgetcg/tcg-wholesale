@@ -35,6 +35,25 @@ interface PurchaseItem {
   order_id: number | null;
 }
 
+interface ReviewItem {
+  id: number;
+  purchase_id: number;
+  card_id: number;
+  condition: string;
+  quantity: number;
+  unit_price_jpy: number;
+  cardrush_url: string | null;
+  card_number: string;
+  sku: string;
+  image_url: string | null;
+  card_name: string;
+  stock: number;
+  pending_stock: number;
+  remambo_order_id: string;
+  purchase_status: string;
+  parcel_id: string | null;
+}
+
 const statusColors: Record<string, string> = {
   ordered: "bg-yellow-900/40 text-yellow-400",
   shipped: "bg-blue-900/40 text-blue-400",
@@ -52,6 +71,8 @@ export default function AdminPurchasesPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [items, setItems] = useState<PurchaseItem[]>([]);
   const [itemsLoading, setItemsLoading] = useState(false);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
+  const [reviewActioning, setReviewActioning] = useState<number | null>(null);
 
   const fetchPurchases = useCallback(async () => {
     const res = await fetch("/api/admin/purchases");
@@ -60,7 +81,24 @@ export default function AdminPurchasesPage() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchPurchases(); }, [fetchPurchases]);
+  const fetchReview = useCallback(async () => {
+    const res = await fetch("/api/admin/purchases/review");
+    const data = await res.json();
+    setReviewItems(data);
+  }, []);
+
+  useEffect(() => { fetchPurchases(); fetchReview(); }, [fetchPurchases, fetchReview]);
+
+  async function handleReviewAction(id: number, action: "approve" | "reject") {
+    setReviewActioning(id);
+    await fetch("/api/admin/purchases/review", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, action }),
+    });
+    setReviewItems((prev) => prev.filter((r) => r.id !== id));
+    setReviewActioning(null);
+  }
 
   async function toggleExpand(id: number) {
     if (expandedId === id) {
@@ -93,6 +131,83 @@ export default function AdminPurchasesPage() {
       <p className="mb-6 text-sm text-gray-500">
         Import a Remambo order: <code className="bg-[#1e1e2e] px-2 py-0.5 rounded text-xs">npx tsx tools/import-remambo-order.ts --order=XXXXXXX</code>
       </p>
+
+      {/* A- Condition Review Panel */}
+      {reviewItems.length > 0 && (
+        <div className="mb-6 rounded-lg border border-yellow-900/50 bg-yellow-900/10">
+          <div className="px-4 py-3 border-b border-yellow-900/30">
+            <h2 className="text-sm font-bold text-yellow-400">
+              Condition Review ({reviewItems.length} items, {reviewItems.reduce((s, r) => s + r.quantity, 0)} qty)
+            </h2>
+            <p className="text-xs text-gray-400 mt-0.5">
+              These A- condition cards need inspection. Approve to count as Mint stock, or reject to remove.
+            </p>
+          </div>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-gray-400 text-xs">
+                <th className="px-4 py-2 w-10"></th>
+                <th className="px-4 py-2">Card</th>
+                <th className="hidden md:table-cell px-4 py-2">Name</th>
+                <th className="px-4 py-2">Condition</th>
+                <th className="px-4 py-2 text-right">Qty</th>
+                <th className="px-4 py-2 text-right">&yen;/unit</th>
+                <th className="hidden sm:table-cell px-4 py-2">Order</th>
+                <th className="px-4 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-yellow-900/20">
+              {reviewItems.map((item) => (
+                <tr key={item.id} className="hover:bg-yellow-900/5">
+                  <td className="px-4 py-2">
+                    {item.image_url ? (
+                      <img src={item.image_url} alt={item.card_number} className="h-10 w-auto rounded" loading="lazy" />
+                    ) : (
+                      <div className="h-10 w-7 rounded bg-[#1e1e2e]" />
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="font-mono text-brand-500">{item.card_number}</div>
+                    <div className="text-xs text-gray-500">{item.sku}</div>
+                  </td>
+                  <td className="hidden md:table-cell px-4 py-2 text-gray-400 text-xs max-w-[200px] truncate">
+                    {item.card_name}
+                  </td>
+                  <td className="px-4 py-2">
+                    <span className="inline-block rounded px-1.5 py-0.5 text-xs bg-yellow-900/40 text-yellow-400">
+                      {item.condition}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-right">{item.quantity}</td>
+                  <td className="px-4 py-2 text-right text-gray-400">&yen;{item.unit_price_jpy.toLocaleString()}</td>
+                  <td className="hidden sm:table-cell px-4 py-2 text-gray-400 text-xs">
+                    {item.remambo_order_id}
+                    {item.parcel_id && <span className="ml-1 text-gray-500">({item.parcel_id})</span>}
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleReviewAction(item.id, "approve")}
+                        disabled={reviewActioning === item.id}
+                        className="rounded bg-green-900/40 px-2.5 py-1 text-green-400 text-xs font-medium hover:bg-green-900/60 transition disabled:opacity-30"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => handleReviewAction(item.id, "reject")}
+                        disabled={reviewActioning === item.id}
+                        className="rounded bg-red-900/40 px-2.5 py-1 text-red-400 text-xs font-medium hover:bg-red-900/60 transition disabled:opacity-30"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <div className="space-y-4">
         {purchases.map((p) => (

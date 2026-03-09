@@ -38,6 +38,9 @@ export default async function AdminDashboard() {
     { href: "/admin/orders", label: "Manage Orders", desc: "View and process all orders" },
     { href: "/admin/prices", label: "Price Management", desc: "Sync prices, upload CSV, edit overrides" },
     { href: "/admin/clients", label: "Client Management", desc: "Add clients, manage discounts" },
+    { href: "/admin/stock-levels", label: "Stock Levels", desc: "View and adjust stock per card" },
+    { href: "/admin/stock-targets", label: "Stock Targets", desc: "Set target stock levels by price tier" },
+    { href: "/admin/to-order", label: "To Order", desc: "Cards needing purchase from supplier" },
   ];
 
   return (
