@@ -150,21 +150,46 @@ function TargetsView({
   sortIcon: (k: SortKey) => string;
   handleSort: (k: SortKey) => void;
 }) {
-  const sorted = [...rows].sort((a, b) => {
+  const [search, setSearch] = useState("");
+  const [setFilter, setSetFilter] = useState("");
+  const [sortCombo, setSortCombo] = useState("to_order_qty-desc");
+
+  // Derive unique sets from data
+  const sets = Array.from(new Set(rows.map((r) => r.set_code).filter((s): s is string => !!s))).sort();
+
+  // Filter
+  const filtered = rows.filter((r) => {
+    if (setFilter && r.set_code !== setFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      if (
+        !r.card_number.toLowerCase().includes(q) &&
+        !(r.card_name || "").toLowerCase().includes(q) &&
+        !(r.sku || "").toLowerCase().includes(q)
+      ) return false;
+    }
+    return true;
+  });
+
+  // Sort (use combo dropdown value instead of header clicks for targets)
+  const sorted = [...filtered].sort((a, b) => {
+    const [sk, so] = sortCombo.split("-") as [string, string];
+    const asc = so === "asc";
     let cmp = 0;
-    switch (sortKey) {
+    switch (sk) {
       case "card_number": cmp = a.card_number.localeCompare(b.card_number); break;
+      case "set_code": cmp = (a.set_code || "").localeCompare(b.set_code || "") || a.card_number.localeCompare(b.card_number); break;
       case "to_order_qty": cmp = a.to_order_qty - b.to_order_qty; break;
       case "price": cmp = a.price - b.price; break;
       case "stock": cmp = a.stock - b.stock; break;
       case "target_qty": cmp = a.target_qty - b.target_qty; break;
       default: cmp = a.to_order_qty - b.to_order_qty;
     }
-    return sortAsc ? cmp : -cmp;
+    return asc ? cmp : -cmp;
   });
 
-  const totalToOrder = rows.reduce((s, r) => s + r.to_order_qty, 0);
-  const uniqueCards = rows.length;
+  const totalToOrder = filtered.reduce((s, r) => s + r.to_order_qty, 0);
+  const uniqueCards = filtered.length;
 
   return (
     <>
@@ -192,44 +217,69 @@ function TargetsView({
         </div>
       </div>
 
+      {/* Filters */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <input
+            type="text"
+            placeholder="Search card # or name..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-[#1e1e2e] bg-[#12121a] px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-brand-500 focus:outline-none"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white text-xs"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+        <select
+          value={setFilter}
+          onChange={(e) => setSetFilter(e.target.value)}
+          className="rounded-lg border border-[#1e1e2e] bg-[#12121a] px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+        >
+          <option value="">All Sets</option>
+          {sets.map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          value={sortCombo}
+          onChange={(e) => setSortCombo(e.target.value)}
+          className="rounded-lg border border-[#1e1e2e] bg-[#12121a] px-3 py-2 text-sm text-white focus:border-brand-500 focus:outline-none"
+        >
+          <option value="to_order_qty-desc">To Order (high→low)</option>
+          <option value="to_order_qty-asc">To Order (low→high)</option>
+          <option value="card_number-asc">Card # (A→Z)</option>
+          <option value="card_number-desc">Card # (Z→A)</option>
+          <option value="set_code-asc">Set (A→Z)</option>
+          <option value="set_code-desc">Set (Z→A)</option>
+          <option value="price-desc">Price (high→low)</option>
+          <option value="price-asc">Price (low→high)</option>
+          <option value="stock-asc">Stock (low→high)</option>
+          <option value="stock-desc">Stock (high→low)</option>
+        </select>
+        {(search || setFilter) && (
+          <span className="text-xs text-gray-500">{filtered.length} of {rows.length} cards</span>
+        )}
+      </div>
+
       {/* Table */}
       <div className="overflow-hidden rounded-lg border border-[#1e1e2e]">
         <table className="w-full text-sm">
           <thead className="bg-[#12121a]">
             <tr className="text-left text-gray-400">
               <th className="px-3 py-3 font-medium w-10"></th>
-              <th
-                className="px-3 py-3 font-medium cursor-pointer hover:text-white transition"
-                onClick={() => handleSort("card_number")}
-              >
-                Card{sortIcon("card_number")}
-              </th>
+              <th className="px-3 py-3 font-medium">Card</th>
               <th className="hidden md:table-cell px-3 py-3 font-medium">Set</th>
-              <th
-                className="px-3 py-3 font-medium text-right cursor-pointer hover:text-white transition"
-                onClick={() => handleSort("price")}
-              >
-                Price{sortIcon("price")}
-              </th>
-              <th
-                className="px-3 py-3 font-medium text-right cursor-pointer hover:text-white transition"
-                onClick={() => handleSort("stock")}
-              >
-                Stock{sortIcon("stock")}
-              </th>
+              <th className="px-3 py-3 font-medium text-right">Price</th>
+              <th className="px-3 py-3 font-medium text-right">Stock</th>
               <th className="px-3 py-3 font-medium text-right">Pending</th>
-              <th
-                className="px-3 py-3 font-medium text-right cursor-pointer hover:text-white transition"
-                onClick={() => handleSort("target_qty")}
-              >
-                Target{sortIcon("target_qty")}
-              </th>
-              <th
-                className="px-3 py-3 font-medium text-right cursor-pointer hover:text-white transition"
-                onClick={() => handleSort("to_order_qty")}
-              >
-                To Order{sortIcon("to_order_qty")}
-              </th>
+              <th className="px-3 py-3 font-medium text-right">Target</th>
+              <th className="px-3 py-3 font-medium text-right">To Order</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1e1e2e]">
