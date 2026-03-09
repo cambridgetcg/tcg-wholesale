@@ -1,219 +1,172 @@
-"use client";
+import { Suspense } from "react";
+import { db } from "@/lib/db";
+import { cards, games, sets as setsTable } from "@/lib/db/schema";
+import { ilike, or, eq, asc, desc, count, sql, SQL, gt, getTableColumns } from "drizzle-orm";
+import StockTable from "./StockTable";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+const PER_PAGE = 50;
 
-interface CardRow {
-  id: number;
-  cardNumber: string;
-  sku: string;
-  name: string | null;
-  setCode: string | null;
-  imageUrl: string | null;
-  stock: number;
-  pendingStock: number;
+function escapeLike(s: string): string {
+  return s.replace(/[%_\\]/g, "\\$&");
 }
 
-export default function StockLevelsPage() {
-  const [cards, setCards] = useState<CardRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [query, setQuery] = useState("");
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [saving, setSaving] = useState<number | null>(null);
-  const [showStocked, setShowStocked] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+export default async function StockLevelsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    q?: string;
+    game?: string;
+    set?: string;
+    sort?: string;
+    order?: string;
+    page?: string;
+    stocked?: string;
+  }>;
+}) {
+  const params = await searchParams;
+  const query = params.q?.trim() || "";
+  const gameFilter = params.game?.trim() || "";
+  const setFilter = params.set?.trim() || "";
+  const sortField = params.sort || "cardNumber";
+  const sortOrder = params.order === "desc" ? "desc" : "asc";
+  const page = Math.max(1, parseInt(params.page || "1", 10) || 1);
+  const stockedOnly = params.stocked === "1";
 
-  const search = useCallback(async (q: string) => {
-    if (!q.trim() && !showStocked) {
-      setCards([]);
-      return;
-    }
-    setLoading(true);
-    const params = new URLSearchParams();
-    if (q.trim()) params.set("q", q.trim());
-    if (showStocked) params.set("stocked", "1");
-    const res = await fetch(`/api/admin/stock/levels?${params}`);
-    const data = await res.json();
-    setCards(data);
-    setLoading(false);
-  }, [showStocked]);
+  const allGames = await db.select().from(games).orderBy(asc(games.sortOrder));
 
-  useEffect(() => {
-    const timer = setTimeout(() => search(query), 300);
-    return () => clearTimeout(timer);
-  }, [query, search]);
-
-  useEffect(() => {
-    searchRef.current?.focus();
-  }, []);
-
-  useEffect(() => {
-    if (editingId !== null) inputRef.current?.select();
-  }, [editingId]);
-
-  async function saveStock(cardId: number, stock: number) {
-    setSaving(cardId);
-    await fetch("/api/admin/stock/adjust", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cardId, stock }),
-    });
-    setCards((prev) =>
-      prev.map((c) => (c.id === cardId ? { ...c, stock } : c))
+  // Build where conditions
+  const conditions: SQL[] = [];
+  if (query) {
+    const pattern = `%${escapeLike(query)}%`;
+    conditions.push(
+      or(
+        ilike(cards.cardNumber, pattern),
+        ilike(cards.name, pattern),
+        ilike(cards.sku, pattern),
+      )!,
     );
-    setSaving(null);
-    setEditingId(null);
+  }
+  if (gameFilter) {
+    const game = allGames.find((g) => g.code === gameFilter);
+    if (game) conditions.push(eq(cards.gameId, game.id));
+  }
+  if (setFilter) {
+    conditions.push(eq(cards.setCode, setFilter));
+  }
+  if (stockedOnly) {
+    conditions.push(or(gt(cards.stock, 0), gt(cards.pendingStock, 0))!);
+  }
+  // Only singles
+  conditions.push(eq(cards.category, "singles"));
+
+  const whereClause = conditions.length > 0
+    ? conditions.reduce((a, b) => sql`${a} AND ${b}`)
+    : undefined;
+
+  // Sort
+  let orderByClause;
+  if (sortField === "stock") {
+    orderByClause = sortOrder === "desc" ? desc(cards.stock) : asc(cards.stock);
+  } else if (sortField === "name") {
+    orderByClause = sortOrder === "desc" ? desc(cards.name) : asc(cards.name);
+  } else if (sortField === "set") {
+    orderByClause = sortOrder === "desc"
+      ? [desc(cards.setCode), desc(cards.cardNumber)]
+      : [asc(cards.setCode), asc(cards.cardNumber)];
+  } else {
+    orderByClause = sortOrder === "desc" ? desc(cards.cardNumber) : asc(cards.cardNumber);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent, card: CardRow) {
-    if (e.key === "Enter") {
-      const val = parseInt(editValue);
-      if (!isNaN(val) && val >= 0) saveStock(card.id, val);
-    } else if (e.key === "Escape") {
-      setEditingId(null);
-    }
+  // Set dropdown
+  const setConditions: SQL[] = [];
+  if (gameFilter) {
+    const game = allGames.find((g) => g.code === gameFilter);
+    if (game) setConditions.push(eq(setsTable.gameId, game.id));
   }
 
-  function startEdit(card: CardRow) {
-    setEditingId(card.id);
-    setEditValue(String(card.stock));
-  }
+  const [countResult, allCards, setRows] = await Promise.all([
+    db.select({ total: count() }).from(cards).where(whereClause),
+    db
+      .select(getTableColumns(cards))
+      .from(cards)
+      .leftJoin(setsTable, eq(cards.setId, setsTable.id))
+      .where(whereClause)
+      .orderBy(...(Array.isArray(orderByClause) ? orderByClause : [orderByClause]))
+      .limit(PER_PAGE)
+      .offset((page - 1) * PER_PAGE),
+    db
+      .select({ code: setsTable.code, name: setsTable.name })
+      .from(setsTable)
+      .where(setConditions.length ? setConditions[0] : undefined)
+      .orderBy(asc(setsTable.code)),
+  ]);
 
-  function increment(card: CardRow, delta: number) {
-    const newVal = Math.max(0, card.stock + delta);
-    saveStock(card.id, newVal);
-  }
-
-  const totalStock = cards.reduce((s, c) => s + c.stock, 0);
-  const totalPending = cards.reduce((s, c) => s + c.pendingStock, 0);
+  const total = countResult[0].total;
+  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  const safePage = Math.min(page, totalPages);
+  const sets = setRows.map((r) => ({ code: r.code, name: r.name }));
 
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-2xl font-bold">Stock Levels</h1>
-        <div className="flex items-center gap-4">
-          {cards.length > 0 && (
-            <span className="text-sm text-gray-400">
-              {cards.length} cards &middot; {totalStock} in stock
-              {totalPending > 0 && <> &middot; {totalPending} pending</>}
-            </span>
-          )}
-          <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showStocked}
-              onChange={(e) => setShowStocked(e.target.checked)}
-              className="accent-brand-500"
-            />
-            Show stocked
-          </label>
-        </div>
+        <span className="text-sm text-gray-400">
+          {total} card{total !== 1 ? "s" : ""}
+        </span>
       </div>
 
-      <div className="mb-6">
-        <input
-          ref={searchRef}
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search by card number, name, or set..."
-          className="w-full rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-sm focus:border-brand-500 focus:outline-none transition"
+      {/* Game tabs */}
+      <Suspense>
+        <GameTabs
+          games={allGames.map((g) => ({ code: g.code, name: g.name, active: g.active ?? true }))}
+          currentGame={gameFilter}
         />
+      </Suspense>
+
+      {/* Filters */}
+      <div className="mt-4 mb-4 flex flex-wrap items-center gap-3">
+        <Suspense>
+          <StockFilters
+            sets={sets}
+            currentQuery={query}
+            currentSet={setFilter}
+            currentSort={sortField}
+            currentOrder={sortOrder}
+            stockedOnly={stockedOnly}
+          />
+        </Suspense>
       </div>
 
-      {loading && <div className="text-gray-400 text-sm">Searching...</div>}
+      {/* Table */}
+      <Suspense>
+        <StockTable
+          cards={allCards}
+          currentSort={sortField}
+          currentOrder={sortOrder}
+        />
+      </Suspense>
 
-      {!loading && cards.length === 0 && (query.trim() || showStocked) && (
-        <div className="text-gray-500 text-sm">No cards found.</div>
-      )}
-
-      {!loading && cards.length === 0 && !query.trim() && !showStocked && (
-        <div className="text-gray-500 text-sm">
-          Search for a card to set its stock level, or check &ldquo;Show stocked&rdquo; to see cards with stock.
-        </div>
-      )}
-
-      {cards.length > 0 && (
-        <div className="overflow-hidden rounded-lg border border-[#1e1e2e]">
-          <table className="w-full text-sm">
-            <thead className="bg-[#12121a]">
-              <tr className="text-left text-gray-400">
-                <th className="px-4 py-3 font-medium w-12"></th>
-                <th className="px-4 py-3 font-medium">Card</th>
-                <th className="hidden md:table-cell px-4 py-3 font-medium">Name</th>
-                <th className="hidden md:table-cell px-4 py-3 font-medium">Set</th>
-                <th className="px-4 py-3 font-medium text-center">Stock</th>
-                <th className="px-4 py-3 font-medium text-center w-32">Adjust</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#1e1e2e]">
-              {cards.map((card) => (
-                <tr key={card.id} className="hover:bg-[#12121a] transition">
-                  <td className="px-4 py-3">
-                    {card.imageUrl ? (
-                      <img src={card.imageUrl} alt={card.cardNumber} className="h-10 w-7 rounded object-cover" />
-                    ) : (
-                      <div className="h-10 w-7 rounded bg-gray-800" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-mono text-brand-500">{card.cardNumber}</div>
-                    <div className="text-xs text-gray-500 font-mono">{card.sku}</div>
-                  </td>
-                  <td className="hidden md:table-cell px-4 py-3 text-gray-400 max-w-[240px] truncate" title={card.name ?? ""}>
-                    {card.name || "\u2014"}
-                  </td>
-                  <td className="hidden md:table-cell px-4 py-3 text-gray-400">{card.setCode || "\u2014"}</td>
-                  <td className="px-4 py-3 text-center">
-                    {editingId === card.id ? (
-                      <input
-                        ref={inputRef}
-                        type="number"
-                        min={0}
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        onKeyDown={(e) => handleKeyDown(e, card)}
-                        onBlur={() => setEditingId(null)}
-                        className="w-16 rounded border border-brand-500 bg-[#0a0a0f] px-2 py-1 text-center text-sm focus:outline-none"
-                      />
-                    ) : (
-                      <button
-                        onClick={() => startEdit(card)}
-                        className={`font-bold text-lg min-w-[2rem] ${card.stock > 0 ? "text-green-400" : "text-gray-500"}`}
-                        title="Click to edit"
-                      >
-                        {card.stock}
-                        {card.pendingStock > 0 && (
-                          <span className="ml-1 text-yellow-500 text-xs font-normal">(+{card.pendingStock})</span>
-                        )}
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => increment(card, -1)}
-                        disabled={card.stock === 0 || saving === card.id}
-                        className="rounded bg-red-900/40 px-2.5 py-1 text-red-400 hover:bg-red-900/60 transition disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
-                      >
-                        &minus;
-                      </button>
-                      <button
-                        onClick={() => increment(card, 1)}
-                        disabled={saving === card.id}
-                        className="rounded bg-green-900/40 px-2.5 py-1 text-green-400 hover:bg-green-900/60 transition disabled:opacity-30 text-sm font-bold"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* Pagination */}
+      <Suspense>
+        <StockPagination currentPage={safePage} totalPages={totalPages} />
+      </Suspense>
     </div>
   );
 }
+
+/* ---------- Inline client components ---------- */
+
+function GameTabs({
+  games,
+  currentGame,
+}: {
+  games: { code: string; name: string; active: boolean }[];
+  currentGame: string;
+}) {
+  return <GameTabsClient games={games} currentGame={currentGame} />;
+}
+
+/* We need small client wrappers for URL-driven navigation */
+import GameTabsClient from "./GameTabsClient";
+import StockFilters from "./StockFilters";
+import StockPagination from "./StockPagination";
