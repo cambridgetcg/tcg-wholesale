@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { auth } from "@/lib/auth";
@@ -6,20 +6,57 @@ import { auth } from "@/lib/auth";
 /**
  * Pipeline: deduce "to be ordered" items from supplier.
  *
- * For each order_item in paid+ orders:
- *   remaining_to_fulfill = ordered_qty - fulfilled_qty
- *   already_purchased    = SUM(purchase_items.quantity) linked to this order_item
- *   to_order             = remaining_to_fulfill - already_purchased  (clamped ≥ 0)
+ * Two sources:
+ *   ?source=orders  (default) — client order fulfillment gaps
+ *   ?source=targets — stock target shortfalls
  *
- * Returns items where remaining_to_fulfill > 0, with all intermediate values
- * so the UI can show the full pipeline.
+ * Orders source:
+ *   For each order_item in paid+ orders:
+ *     remaining_to_fulfill = ordered_qty - fulfilled_qty
+ *     already_purchased    = SUM(purchase_items.quantity) linked to this order_item
+ *     to_order             = remaining_to_fulfill - already_purchased  (clamped ≥ 0)
+ *
+ * Targets source:
+ *   For each card with a price matching a stock_targets tier:
+ *     to_order = target_qty - stock - pending_stock  (clamped ≥ 0)
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session || session.user.role !== "admin") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const source = req.nextUrl.searchParams.get("source") || "orders";
+
+  if (source === "targets") {
+    const rows = await db.execute(sql`
+      SELECT
+        c.id AS card_id,
+        c.card_number,
+        c.sku,
+        c.image_url,
+        c.name AS card_name,
+        c.set_code,
+        COALESCE(c.price, 0)::float AS price,
+        c.stock,
+        c.pending_stock,
+        COALESCE(st.target_qty, 0) AS target_qty,
+        GREATEST(COALESCE(st.target_qty, 0) - c.stock - c.pending_stock, 0) AS to_order_qty
+      FROM cards c
+      LEFT JOIN stock_targets st
+        ON c.price >= st.price_min AND c.price < st.price_max
+      WHERE c.category = 'singles'
+        AND c.price IS NOT NULL
+        AND c.price > 0
+        AND COALESCE(st.target_qty, 0) - c.stock - c.pending_stock > 0
+      ORDER BY
+        GREATEST(COALESCE(st.target_qty, 0) - c.stock - c.pending_stock, 0) DESC,
+        c.card_number ASC
+    `);
+    return NextResponse.json(rows);
+  }
+
+  // Default: orders source
   const rows = await db.execute(sql`
     WITH order_scope AS (
       SELECT
