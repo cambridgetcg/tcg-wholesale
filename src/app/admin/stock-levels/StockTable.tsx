@@ -29,6 +29,7 @@ export default function StockTable({
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState<number | null>(null);
+  const [lightbox, setLightbox] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setCards(initialCards); }, [initialCards]);
@@ -130,14 +131,13 @@ export default function StockTable({
             <tr key={card.id} className="hover:bg-[#12121a] transition">
               <td className="px-2 md:px-4 py-1">
                 {card.imageUrl ? (
-                  <a href={card.imageUrl} target="_blank" rel="noopener noreferrer">
-                    <img
-                      src={card.imageUrl}
-                      alt={card.cardNumber}
-                      className="h-10 w-auto rounded hover:opacity-80 transition cursor-pointer"
-                      loading="lazy"
-                    />
-                  </a>
+                  <img
+                    src={card.imageUrl}
+                    alt={card.cardNumber}
+                    className="h-10 w-auto rounded hover:opacity-80 transition cursor-pointer"
+                    loading="lazy"
+                    onClick={() => setLightbox(card.imageUrl)}
+                  />
                 ) : (
                   <div className="h-10 w-7 rounded bg-[#1e1e2e]" />
                 )}
@@ -195,6 +195,19 @@ export default function StockTable({
           ))}
         </tbody>
       </table>
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 cursor-pointer"
+          onClick={() => setLightbox(null)}
+        >
+          <img
+            src={lightbox}
+            alt="Card preview"
+            className="max-h-[80vh] max-w-[90vw] rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
