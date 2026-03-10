@@ -134,7 +134,7 @@ export default function StockTable({
                   <img
                     src={card.imageUrl}
                     alt={card.cardNumber}
-                    className="h-20 w-auto rounded hover:opacity-80 transition cursor-pointer"
+                    className="h-20 w-14 object-cover rounded hover:opacity-80 transition cursor-pointer"
                     loading="lazy"
                     onClick={() => setLightbox(card.imageUrl)}
                   />
