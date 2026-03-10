@@ -61,10 +61,19 @@ export default function StockTable({
     setEditingId(null);
   }, []);
 
+  const commitEdit = useCallback((card: CardRow) => {
+    const val = parseInt(editValue);
+    if (!isNaN(val) && val >= 0 && val !== card.stock) {
+      saveStock(card.id, val);
+    } else {
+      setEditingId(null);
+    }
+  }, [editValue, saveStock]);
+
   function handleKeyDown(e: React.KeyboardEvent, card: CardRow) {
     if (e.key === "Enter") {
-      const val = parseInt(editValue);
-      if (!isNaN(val) && val >= 0) saveStock(card.id, val);
+      e.preventDefault();
+      commitEdit(card);
     } else if (e.key === "Escape") {
       setEditingId(null);
     }
@@ -146,7 +155,7 @@ export default function StockTable({
                     value={editValue}
                     onChange={(e) => setEditValue(e.target.value)}
                     onKeyDown={(e) => handleKeyDown(e, card)}
-                    onBlur={() => setEditingId(null)}
+                    onBlur={() => commitEdit(card)}
                     className="w-16 rounded border border-brand-500 bg-[#0a0a0f] px-2 py-1 text-center text-sm focus:outline-none"
                   />
                 ) : (
