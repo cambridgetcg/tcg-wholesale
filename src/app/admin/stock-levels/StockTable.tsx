@@ -103,7 +103,7 @@ export default function StockTable({
       <table className="w-full text-sm">
         <thead className="bg-[#12121a]">
           <tr className="text-left text-gray-400">
-            <th className="px-2 md:px-4 py-3 font-medium w-12"></th>
+            <th className="px-2 md:px-4 py-3 font-medium w-16"></th>
             <th
               className="px-2 md:px-4 py-3 font-medium cursor-pointer hover:text-gray-200 transition select-none"
               onClick={() => toggleSort("cardNumber")}
@@ -134,7 +134,7 @@ export default function StockTable({
                   <img
                     src={card.imageUrl}
                     alt={card.cardNumber}
-                    className="h-20 w-14 object-cover rounded hover:opacity-80 transition cursor-pointer"
+                    className="h-20 w-auto rounded hover:opacity-80 transition cursor-pointer"
                     loading="lazy"
                     onClick={() => setLightbox(card.imageUrl)}
                   />
