@@ -130,12 +130,14 @@ export default function StockTable({
             <tr key={card.id} className="hover:bg-[#12121a] transition">
               <td className="px-2 md:px-4 py-1">
                 {card.imageUrl ? (
-                  <img
-                    src={card.imageUrl}
-                    alt={card.cardNumber}
-                    className="h-10 w-auto rounded"
-                    loading="lazy"
-                  />
+                  <a href={card.imageUrl} target="_blank" rel="noopener noreferrer">
+                    <img
+                      src={card.imageUrl}
+                      alt={card.cardNumber}
+                      className="h-10 w-auto rounded hover:opacity-80 transition cursor-pointer"
+                      loading="lazy"
+                    />
+                  </a>
                 ) : (
                   <div className="h-10 w-7 rounded bg-[#1e1e2e]" />
                 )}
