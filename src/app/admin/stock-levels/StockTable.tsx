@@ -103,7 +103,7 @@ export default function StockTable({
       <table className="w-full text-sm">
         <thead className="bg-[#12121a]">
           <tr className="text-left text-gray-400">
-            <th className="px-2 md:px-4 py-3 font-medium w-16"></th>
+            <th className="px-2 md:px-4 py-3 font-medium w-24"></th>
             <th
               className="px-2 md:px-4 py-3 font-medium cursor-pointer hover:text-gray-200 transition select-none"
               onClick={() => toggleSort("cardNumber")}
