@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef, ReactNode } from "react";
 
-
 export interface CardData {
   id: number;
   cardNumber: string;
@@ -18,6 +17,13 @@ export interface CartItem {
   quantity: number;
 }
 
+export interface PriceChange {
+  cardId: number;
+  cardNumber: string;
+  oldPrice: number;
+  newPrice: number;
+}
+
 interface CartContextValue {
   items: CartItem[];
   addItem: (card: CardData, qty?: number) => void;
@@ -25,10 +31,14 @@ interface CartContextValue {
   updateQuantity: (cardId: number, qty: number) => void;
   clear: () => void;
   flushSync: () => Promise<void>;
+  refreshPrices: () => Promise<void>;
   total: number;
   discountedTotal: number;
   itemCount: number;
   volumeDiscountPct: number;
+  priceChanges: PriceChange[];
+  dismissPriceChanges: () => void;
+  isRefreshing: boolean;
 }
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -50,13 +60,10 @@ function migrateCartItems(items: CartItem[]): CartItem[] {
 
 function mergeItems(local: CartItem[], server: CartItem[]): CartItem[] {
   const map = new Map<number, CartItem>();
-  for (const item of server) {
-    map.set(item.card.id, item);
-  }
+  for (const item of server) map.set(item.card.id, item);
   for (const item of local) {
     const existing = map.get(item.card.id);
     if (existing) {
-      // Take higher quantity, local card data wins (fresher)
       map.set(item.card.id, {
         card: item.card,
         quantity: Math.max(item.quantity, existing.quantity),
@@ -77,6 +84,8 @@ export function CartProvider({
 }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [priceChanges, setPriceChanges] = useState<PriceChange[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSyncingFromServer = useRef(false);
 
@@ -88,9 +97,7 @@ export function CartProvider({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: cartItems }),
-      }).catch(() => {
-        // Silent failure — localStorage is the fallback
-      });
+      }).catch(() => {});
     }, SYNC_DEBOUNCE_MS);
   }, []);
 
@@ -109,7 +116,6 @@ export function CartProvider({
     } catch {}
     setHydrated(true);
 
-    // Async fetch from server and merge
     fetch("/api/cart")
       .then((res) => {
         if (!res.ok) throw new Error("Not authenticated");
@@ -117,41 +123,89 @@ export function CartProvider({
       })
       .then((serverItems: CartItem[]) => {
         if (!Array.isArray(serverItems)) return;
-
         if (localItems.length === 0 && serverItems.length > 0) {
-          // No local items — just use server
           isSyncingFromServer.current = true;
           setItems(serverItems);
         } else if (localItems.length > 0 && serverItems.length > 0) {
-          // Both have items — merge
           const merged = mergeItems(localItems, serverItems);
           isSyncingFromServer.current = true;
           setItems(merged);
         } else if (localItems.length > 0 && serverItems.length === 0) {
-          // Local only — sync up to server (first-time migration)
           syncToServer(localItems);
         }
-        // Both empty: nothing to do
       })
-      .catch(() => {
-        // Not logged in or network error — localStorage-only mode
-      });
+      .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Persist to localStorage on change, and sync to server
   useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-
     if (isSyncingFromServer.current) {
-      // This change came from server merge — sync merged result back
       isSyncingFromServer.current = false;
       syncToServer(items);
       return;
     }
-
     syncToServer(items);
   }, [items, hydrated, syncToServer]);
+
+  /**
+   * Fetch current prices from the server for all items in the cart.
+   * Updates item prices in place and surfaces a list of changes.
+   */
+  const refreshPrices = useCallback(async () => {
+    setItems((current) => {
+      if (current.length === 0) return current;
+      return current; // start fetch below with latest items
+    });
+
+    setIsRefreshing(true);
+    try {
+      // Capture current items synchronously via a ref-style read
+      // (setItems callback gives us the latest snapshot)
+      let snapshot: CartItem[] = [];
+      setItems((current) => {
+        snapshot = current;
+        return current;
+      });
+
+      if (snapshot.length === 0) return;
+
+      const cardIds = snapshot.map((i) => i.card.id);
+      const res = await fetch("/api/cart/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardIds }),
+      });
+      if (!res.ok) return;
+
+      const { prices } = await res.json() as { prices: Record<number, number> };
+      const changes: PriceChange[] = [];
+
+      setItems((current) => {
+        const updated = current.map((item) => {
+          const newPrice = prices[item.card.id];
+          if (newPrice == null || newPrice === item.card.price) return item;
+          changes.push({
+            cardId: item.card.id,
+            cardNumber: item.card.cardNumber,
+            oldPrice: item.card.price,
+            newPrice,
+          });
+          return { ...item, card: { ...item.card, price: newPrice } };
+        });
+        return changes.length > 0 ? updated : current;
+      });
+
+      if (changes.length > 0) setPriceChanges(changes);
+    } catch {
+      // Silent — price refresh is best-effort
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  const dismissPriceChanges = useCallback(() => setPriceChanges([]), []);
 
   const addItem = useCallback((card: CardData, qty = 1) => {
     setItems((prev) => {
@@ -181,12 +235,11 @@ export function CartProvider({
 
   const clear = useCallback(() => {
     setItems([]);
-    // Immediately clear server cart (don't debounce)
+    setPriceChanges([]);
     if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     fetch("/api/cart", { method: "DELETE" }).catch(() => {});
   }, []);
 
-  // Flush any pending debounced sync immediately (e.g. before sign out)
   const flushSync = useCallback(async () => {
     if (syncTimerRef.current) {
       clearTimeout(syncTimerRef.current);
@@ -222,10 +275,14 @@ export function CartProvider({
         updateQuantity,
         clear,
         flushSync,
+        refreshPrices,
         total,
         discountedTotal,
         itemCount,
         volumeDiscountPct,
+        priceChanges,
+        dismissPriceChanges,
+        isRefreshing,
       }}
     >
       {children}

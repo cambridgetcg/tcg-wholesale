@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Nav from "@/components/Nav";
 import { useCart } from "@/lib/cart-context";
@@ -14,24 +14,20 @@ export default function NewOrderPage() {
     removeItem,
     clear,
     total,
-    discountedTotal,
     itemCount,
-    volumeDiscountPct,
+    refreshPrices,
+    priceChanges,
+    dismissPriceChanges,
+    isRefreshing,
   } = useCart();
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const discountAmount = total - discountedTotal;
-
-  // Next discount tier explanation
-  const currentPctDisplay = (volumeDiscountPct * 100).toFixed(0);
-  const nextTierSpend = (Math.floor(volumeDiscountPct / 0.02) + 1) * 10_000;
-  const nextTierPct = Math.min((Math.floor(volumeDiscountPct / 0.02) + 1) * 2, 10);
-  const tierText =
-    volumeDiscountPct >= 0.10
-      ? "Your discount: 10% (maximum tier)"
-      : `Your discount: ${currentPctDisplay}% (spend \u00a3${nextTierSpend.toLocaleString()}+ this month to unlock ${nextTierPct}%)`;
+  // Refresh prices automatically when the page mounts
+  useEffect(() => {
+    if (items.length > 0) refreshPrices();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function submitOrder() {
     if (items.length === 0) return;
@@ -65,6 +61,37 @@ export default function NewOrderPage() {
       <main className="mx-auto max-w-7xl px-6 py-8">
         <h1 className="mb-6 text-2xl font-bold">Review Order</h1>
 
+        {/* Price change banner */}
+        {priceChanges.length > 0 && (
+          <div className="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-yellow-400 mb-1">
+                  Prices updated — {priceChanges.length} item{priceChanges.length > 1 ? "s" : ""} changed
+                </p>
+                <ul className="text-xs text-yellow-300/80 space-y-0.5">
+                  {priceChanges.map((c) => (
+                    <li key={c.cardId}>
+                      {c.cardNumber}:{" "}
+                      <span className="line-through text-yellow-500/60">£{c.oldPrice.toFixed(2)}</span>
+                      {" → "}
+                      <span className={c.newPrice > c.oldPrice ? "text-red-400" : "text-green-400"}>
+                        £{c.newPrice.toFixed(2)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <button
+                onClick={dismissPriceChanges}
+                className="text-yellow-500/60 hover:text-yellow-400 transition text-xs shrink-0"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
         {items.length === 0 ? (
           <div className="rounded-lg border border-[#1e1e2e] bg-[#12121a] p-8 text-center">
             <p className="text-gray-400 mb-4">Your cart is empty.</p>
@@ -83,70 +110,97 @@ export default function NewOrderPage() {
                 <thead className="bg-[#12121a]">
                   <tr className="text-left text-gray-400">
                     <th className="px-2 md:px-4 py-3 font-medium">Card #</th>
-                    <th className="px-2 md:px-4 py-3 font-medium text-right">Price</th>
+                    <th className="px-2 md:px-4 py-3 font-medium hidden md:table-cell">Name</th>
+                    <th className="px-2 md:px-4 py-3 font-medium text-right">Unit Price</th>
                     <th className="px-2 md:px-4 py-3 font-medium text-right">Qty</th>
                     <th className="px-2 md:px-4 py-3 font-medium text-right">Line Total</th>
                     <th className="px-2 md:px-4 py-3"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1e1e2e]">
-                  {items.map((item) => (
-                    <tr key={item.card.id}>
-                      <td className="px-2 md:px-4 py-3">
-                        <span className="font-mono text-brand-500">{item.card.cardNumber}</span>
-                      </td>
-                      <td className="px-2 md:px-4 py-3 text-right text-gray-400">
-                        &pound;{item.card.price.toFixed(2)}
-                      </td>
-                      <td className="px-2 md:px-4 py-3 text-right">
-                        <input
-                          type="number"
-                          min={1}
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const val = parseInt(e.target.value, 10);
-                            if (val >= 1) updateQuantity(item.card.id, val);
-                          }}
-                          className="w-16 rounded bg-[#0a0a0f] border border-[#1e1e2e] px-2 py-1 text-right text-sm focus:border-brand-500 focus:outline-none"
-                        />
-                      </td>
-                      <td className="px-2 md:px-4 py-3 text-right font-medium">
-                        &pound;{(item.card.price * item.quantity).toFixed(2)}
-                      </td>
-                      <td className="px-2 md:px-4 py-3 text-right">
-                        <button
-                          onClick={() => removeItem(item.card.id)}
-                          className="text-gray-500 hover:text-red-400 transition text-xs"
-                        >
-                          Remove
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {items.map((item) => {
+                    const changed = priceChanges.find((c) => c.cardId === item.card.id);
+                    return (
+                      <tr key={item.card.id} className={changed ? "bg-yellow-500/5" : ""}>
+                        <td className="px-2 md:px-4 py-3">
+                          <span className="font-mono text-brand-500">{item.card.cardNumber}</span>
+                        </td>
+                        <td className="px-2 md:px-4 py-3 text-gray-400 hidden md:table-cell text-xs">
+                          {item.card.name || "—"}
+                        </td>
+                        <td className="px-2 md:px-4 py-3 text-right text-gray-400">
+                          £{item.card.price.toFixed(2)}
+                          {changed && (
+                            <span className="ml-1 text-[10px] text-yellow-400">↑</span>
+                          )}
+                        </td>
+                        <td className="px-2 md:px-4 py-3 text-right">
+                          <input
+                            type="number"
+                            min={1}
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value, 10);
+                              if (val >= 1) updateQuantity(item.card.id, val);
+                            }}
+                            className="w-16 rounded bg-[#0a0a0f] border border-[#1e1e2e] px-2 py-1 text-right text-sm focus:border-brand-500 focus:outline-none"
+                          />
+                        </td>
+                        <td className="px-2 md:px-4 py-3 text-right font-medium">
+                          £{(item.card.price * item.quantity).toFixed(2)}
+                        </td>
+                        <td className="px-2 md:px-4 py-3 text-right">
+                          <button
+                            onClick={() => removeItem(item.card.id)}
+                            className="text-gray-500 hover:text-red-400 transition text-xs"
+                          >
+                            Remove
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            {/* Running total sidebar */}
+            {/* Order summary sidebar */}
             <div className="rounded-lg border border-[#1e1e2e] bg-[#12121a] p-4 space-y-4">
               <h2 className="font-semibold">Order Summary</h2>
 
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-400">Subtotal</span>
-                  <span>&pound;{total.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-green-400">
-                  <span>Volume Discount ({currentPctDisplay}%)</span>
-                  <span>-&pound;{discountAmount.toFixed(2)}</span>
+                <div className="flex justify-between text-gray-400">
+                  <span>{itemCount} item{itemCount !== 1 ? "s" : ""}</span>
                 </div>
                 <div className="border-t border-[#1e1e2e] pt-2 flex justify-between text-lg font-bold">
-                  <span>Total</span>
-                  <span className="text-green-400">&pound;{discountedTotal.toFixed(2)}</span>
+                  <span>Total (inc. VAT)</span>
+                  <span className="text-green-400">£{total.toFixed(2)}</span>
                 </div>
               </div>
 
-              <p className="text-xs text-gray-500">{tierText}</p>
+              {/* Price refresh */}
+              <button
+                onClick={refreshPrices}
+                disabled={isRefreshing}
+                className="w-full rounded border border-[#1e1e2e] bg-[#0a0a0f] py-2 text-xs text-gray-400 hover:text-gray-200 hover:border-gray-600 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isRefreshing ? (
+                  <>
+                    <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                    </svg>
+                    Refreshing prices…
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh prices
+                  </>
+                )}
+              </button>
 
               {/* Notes */}
               <div>
@@ -169,7 +223,7 @@ export default function NewOrderPage() {
                 disabled={submitting || items.length === 0}
                 className="w-full rounded bg-green-600 py-2.5 text-sm font-medium hover:bg-green-700 transition disabled:opacity-50"
               >
-                {submitting ? "Submitting..." : "Submit for Quote"}
+                {submitting ? "Submitting…" : "Submit for Quote"}
               </button>
 
               <p className="text-xs text-gray-500 text-center">

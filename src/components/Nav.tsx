@@ -81,9 +81,6 @@ export default function Nav() {
               <Link href="/fulfillment" className="hover:text-brand-500 transition">
                 Fulfillment
               </Link>
-              <Link href="/discount" className="hover:text-brand-500 transition">
-                Discounts
-              </Link>
               <Link href="/margin" className="hover:text-brand-500 transition">
                 Margins
               </Link>
