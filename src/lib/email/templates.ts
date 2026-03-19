@@ -1,4 +1,12 @@
 // ---------------------------------------------------------------------------
+// HTML escaping for user-supplied strings
+// ---------------------------------------------------------------------------
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// ---------------------------------------------------------------------------
 // Data interfaces
 // ---------------------------------------------------------------------------
 
@@ -83,8 +91,8 @@ function itemsTable(items: OrderItemData[]): string {
     .map(
       (item) => `
       <tr>
-        <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};font-family:monospace;color:${ACCENT};">${item.cardNumber}</td>
-        <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};color:${MUTED};">${item.cardName ?? ""}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};font-family:monospace;color:${ACCENT};">${escHtml(item.cardNumber)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};color:${MUTED};">${escHtml(item.cardName ?? "")}</td>
         <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};text-align:right;">${item.quantity}</td>
         <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};text-align:right;color:${MUTED};">&pound;${fmt(item.unitPrice)}</td>
         <td style="padding:8px 12px;border-bottom:1px solid ${BORDER};text-align:right;font-weight:600;">&pound;${fmt(item.lineTotal)}</td>
@@ -162,7 +170,7 @@ export function quoteReady(
     : "";
 
   const body = `
-    <p style="margin:0 0 16px;">Hi ${client.name},</p>
+    <p style="margin:0 0 16px;">Hi ${escHtml(client.name)},</p>
     <p style="margin:0 0 16px;">Your quote for Order <strong>#${order.id}</strong> is ready. Here's what we've priced up for you:</p>
     ${itemsTable(items)}
     ${totalsBlock(order)}
@@ -181,7 +189,7 @@ export function orderConfirmed(
   client: ClientData,
 ): EmailResult {
   const body = `
-    <p style="margin:0 0 16px;">Hi ${client.name},</p>
+    <p style="margin:0 0 16px;">Hi ${escHtml(client.name)},</p>
     <p style="margin:0 0 16px;">Great news — Order <strong>#${order.id}</strong> has been confirmed and is now awaiting payment.</p>
     ${totalsBlock(order)}
     ${orderLink(order.id)}
@@ -198,7 +206,7 @@ export function orderShipped(
   client: ClientData,
 ): EmailResult {
   const body = `
-    <p style="margin:0 0 16px;">Hi ${client.name},</p>
+    <p style="margin:0 0 16px;">Hi ${escHtml(client.name)},</p>
     <p style="margin:0 0 16px;">Your Order <strong>#${order.id}</strong> has shipped! Estimated arrival is <strong>3-5 business days</strong>.</p>
     ${totalsBlock(order)}
     ${orderLink(order.id)}
@@ -215,7 +223,7 @@ export function orderDelivered(
   client: ClientData,
 ): EmailResult {
   const body = `
-    <p style="margin:0 0 16px;">Hi ${client.name},</p>
+    <p style="margin:0 0 16px;">Hi ${escHtml(client.name)},</p>
     <p style="margin:0 0 16px;">Order <strong>#${order.id}</strong> has been delivered. Thank you for your business!</p>
     ${totalsBlock(order)}
     ${orderLink(order.id)}
@@ -243,11 +251,11 @@ export function newOrderAdmin(
       </tr>
       <tr>
         <td style="padding:4px 0;color:${MUTED};">Client</td>
-        <td style="padding:4px 0;text-align:right;">${client.name}${client.company ? ` (${client.company})` : ""}</td>
+        <td style="padding:4px 0;text-align:right;">${escHtml(client.name)}${client.company ? ` (${escHtml(client.company)})` : ""}</td>
       </tr>
       <tr>
         <td style="padding:4px 0;color:${MUTED};">Email</td>
-        <td style="padding:4px 0;text-align:right;">${client.email}</td>
+        <td style="padding:4px 0;text-align:right;">${escHtml(client.email)}</td>
       </tr>
       <tr>
         <td style="padding:4px 0;color:${MUTED};">Items</td>
@@ -258,7 +266,7 @@ export function newOrderAdmin(
         <td style="padding:8px 0 0;border-top:1px solid ${BORDER};text-align:right;font-weight:700;font-size:16px;color:${GREEN};">&pound;${fmt(order.total)}</td>
       </tr>
     </table>
-    ${order.notes ? `<p style="margin:0 0 16px;padding:12px;background:${BG};border:1px solid ${BORDER};border-radius:6px;font-size:13px;color:${MUTED};"><strong style="color:${TEXT};">Client notes:</strong> ${order.notes}</p>` : ""}
+    ${order.notes ? `<p style="margin:0 0 16px;padding:12px;background:${BG};border:1px solid ${BORDER};border-radius:6px;font-size:13px;color:${MUTED};"><strong style="color:${TEXT};">Client notes:</strong> ${escHtml(order.notes)}</p>` : ""}
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;">
       <tr><td style="background:${ACCENT};border-radius:6px;">
         <a href="${adminUrl}" style="display:inline-block;padding:12px 24px;color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;">
@@ -268,7 +276,7 @@ export function newOrderAdmin(
     </table>`;
 
   return {
-    subject: `New Order #${order.id} from ${client.name} — \u00a3${fmt(order.total)}`,
+    subject: `New Order #${order.id} from ${escHtml(client.name)} — \u00a3${fmt(order.total)}`,
     html: wrap(`New Order #${order.id}`, body),
   };
 }

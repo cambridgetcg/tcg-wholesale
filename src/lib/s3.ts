@@ -31,7 +31,11 @@ export async function fetchPriceFeed(): Promise<CardPriceRow[]> {
     if (rowNumber === 1) return; // skip header
     const sku = row.getCell(1).value?.toString() || "";
     const cardrushJpy = Number(row.getCell(2).value) || 0;
-    const gbpToJpy = Number(row.getCell(6).value) || 208.53;
+    const gbpToJpyRaw = Number(row.getCell(6).value);
+    if (!gbpToJpyRaw || gbpToJpyRaw <= 0) {
+      throw new Error("GBP/JPY exchange rate missing from price feed");
+    }
+    const gbpToJpy = gbpToJpyRaw;
     const ebayItemNumber = row.getCell(7).value?.toString() || "";
 
     if (sku && cardrushJpy > 0) {

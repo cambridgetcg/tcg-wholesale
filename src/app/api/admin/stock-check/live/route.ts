@@ -84,6 +84,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Max 50 URLs per request" }, { status: 400 });
   }
 
+  // URL allowlist — only allow fetching from CardRush
+  const ALLOWED_ORIGINS = ["https://cardrush.co.jp"];
+  for (const url of urls) {
+    try {
+      const parsed = new URL(url);
+      if (!ALLOWED_ORIGINS.some((origin) => `${parsed.protocol}//${parsed.hostname}` === origin)) {
+        return NextResponse.json({ error: `URL not allowed: ${url}` }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: `Invalid URL: ${url}` }, { status: 400 });
+    }
+  }
+
   const results: Record<string, { priceJpy: number; stock: number } | { error: string }> = {};
 
   for (let i = 0; i < urls.length; i++) {

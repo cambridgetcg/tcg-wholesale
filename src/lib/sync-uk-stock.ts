@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
  */
 export async function syncUkStock(cardIds?: number[]) {
   const scope = cardIds?.length ? sql`AND c.id = ANY(${cardIds})` : sql``;
+  const scopeNoAlias = cardIds?.length ? sql`AND id = ANY(${cardIds})` : sql``;
 
   // On-hand stock: only received Mint purchases (exclude A- condition)
   await db.execute(sql`
@@ -45,7 +46,7 @@ export async function syncUkStock(cardIds?: number[]) {
       JOIN purchases pu ON pu.id = pi.purchase_id
       WHERE pu.status = 'received' AND pi.condition NOT LIKE '状態%'
     )
-    ${scope}
+    ${scopeNoAlias}
   `);
 
   // Pending stock: ordered or shipped Mint only (exclude A- condition)
@@ -71,6 +72,6 @@ export async function syncUkStock(cardIds?: number[]) {
       JOIN purchases pu ON pu.id = pi.purchase_id
       WHERE pu.status IN ('ordered', 'shipped') AND pi.condition NOT LIKE '状態%'
     )
-    ${scope}
+    ${scopeNoAlias}
   `);
 }

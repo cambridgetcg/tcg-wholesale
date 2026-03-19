@@ -2,8 +2,21 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { stockTargets } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
+import { auth } from "@/lib/auth";
+
+async function requireAdmin() {
+  const session = await auth();
+  if (!session || session.user.role !== "admin") {
+    return null;
+  }
+  return session;
+}
 
 export async function GET() {
+  if (!await requireAdmin()) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const rows = await db
     .select()
     .from(stockTargets)
@@ -12,6 +25,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!await requireAdmin()) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { priceMin, priceMax, targetQty } = await req.json();
   const [row] = await db
     .insert(stockTargets)
@@ -21,6 +38,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  if (!await requireAdmin()) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id, priceMin, priceMax, targetQty } = await req.json();
   const [row] = await db
     .update(stockTargets)
@@ -31,6 +52,10 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  if (!await requireAdmin()) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id } = await req.json();
   await db.delete(stockTargets).where(eq(stockTargets.id, id));
   return NextResponse.json({ ok: true });

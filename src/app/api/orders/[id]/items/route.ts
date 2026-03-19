@@ -74,6 +74,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Snapshot items BEFORE mutation for audit trail
   const snapshot = await captureItemsSnapshot(orderId);
 
+  // Verify all item IDs belong to this order
+  const orderItemRows = await db.select({ id: orderItems.id }).from(orderItems).where(eq(orderItems.orderId, orderId));
+  const validItemIds = new Set(orderItemRows.map((r) => r.id));
+  for (const item of body.items) {
+    if (!validItemIds.has(item.id)) {
+      return NextResponse.json({ error: `Item ${item.id} does not belong to order ${orderId}` }, { status: 404 });
+    }
+  }
+
   // Soft-delete unavailable items (preserve for audit trail)
   const unavailableIds = body.items.filter((i) => !i.available).map((i) => i.id);
   for (const itemId of unavailableIds) {

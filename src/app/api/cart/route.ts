@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { cartItems } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { cartItems, cards } from "@/lib/db/schema";
+import { eq, inArray } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 
 export async function GET() {
@@ -56,24 +56,37 @@ export async function PUT(req: NextRequest) {
 
   const now = new Date();
 
+  // Look up real prices from DB to prevent client-supplied price manipulation
+  const cardIds = body.items.map((item) => item.card.id);
+  const dbCards = cardIds.length > 0
+    ? await db.select({ id: cards.id, price: cards.price }).from(cards).where(inArray(cards.id, cardIds))
+    : [];
+  const priceMap = new Map(dbCards.map((c) => [c.id, c.price]));
+
   await db.transaction(async (tx) => {
     await tx.delete(cartItems).where(eq(cartItems.clientId, clientId));
 
     if (body.items.length > 0) {
       await tx.insert(cartItems).values(
-        body.items.map((item) => ({
-          clientId,
-          cardId: item.card.id,
-          quantity: item.quantity,
-          cardNumber: item.card.cardNumber,
-          sku: item.card.sku,
-          cardName: item.card.name,
-          setCode: item.card.setCode,
-          setName: item.card.setName,
-          price: item.card.price,
-          addedAt: now,
-          updatedAt: now,
-        }))
+        body.items.map((item) => {
+          const verifiedPrice = priceMap.get(item.card.id);
+          if (verifiedPrice == null) {
+            console.warn(`[CART] Card ${item.card.id} not found in DB, using client price as fallback`);
+          }
+          return {
+            clientId,
+            cardId: item.card.id,
+            quantity: item.quantity,
+            cardNumber: item.card.cardNumber,
+            sku: item.card.sku,
+            cardName: item.card.name,
+            setCode: item.card.setCode,
+            setName: item.card.setName,
+            price: verifiedPrice ?? item.card.price,
+            addedAt: now,
+            updatedAt: now,
+          };
+        })
       );
     }
   });

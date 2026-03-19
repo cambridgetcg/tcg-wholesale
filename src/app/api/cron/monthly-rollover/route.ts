@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get("secret");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && secret !== cronSecret) {
+  if (!cronSecret || (authHeader !== `Bearer ${cronSecret}` && secret !== cronSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   const secret = req.nextUrl.searchParams.get("secret");
   const cronSecret = process.env.CRON_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && secret !== cronSecret) {
+  if (!cronSecret || (authHeader !== `Bearer ${cronSecret}` && secret !== cronSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

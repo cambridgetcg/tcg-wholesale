@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sql } from "drizzle-orm";
 import { syncUkStock } from "@/lib/sync-uk-stock";
+import { auth } from "@/lib/auth";
 
 // GET: list all A- condition purchase items needing review
 export async function GET() {
+  const session = await auth();
+  if (!session || session.user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const rows = await db.execute(sql`
     SELECT
       pi.id,
@@ -34,6 +40,11 @@ export async function GET() {
 
 // PATCH: approve (set condition to Mint) or reject (delete) an A- item
 export async function PATCH(req: NextRequest) {
+  const session = await auth();
+  if (!session || session.user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const { id, action } = await req.json();
 
   if (action === "approve") {
