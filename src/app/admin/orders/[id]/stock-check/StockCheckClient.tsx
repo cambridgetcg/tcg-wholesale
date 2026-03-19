@@ -77,7 +77,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
 
   const filteredItems = statusFilter ? items.filter((i) => i.stockStatus === statusFilter) : items;
 
-  async function updateItemStatus(itemId: number, stockStatus: string, checkedPriceJpy?: number, checkedQuantity?: number) {
+  const updateItemStatus = useCallback(async (itemId: number, stockStatus: string, checkedPriceJpy?: number, checkedQuantity?: number) => {
     setSaving(itemId);
     setError(null);
     try {
@@ -99,7 +99,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
     } finally {
       setSaving(null);
     }
-  }
+  }, [orderId]);
 
   async function completeStockCheck() {
     setCompleting(true);
@@ -119,7 +119,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
     }
   }
 
-  async function applyLiveResult(item: StockItem, result: LiveResult) {
+  const applyLiveResult = useCallback(async (item: StockItem, result: LiveResult) => {
     setLiveResults((prev) => ({ ...prev, [item.id]: result }));
     const dbPrice = item.cardrushJpy ?? 0;
 
@@ -139,7 +139,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
       // Price changed — pre-fill price input, don't auto-submit
       setPriceInputs((prev) => ({ ...prev, [item.id]: result.priceJpy.toString() }));
     }
-  }
+  }, [updateItemStatus]);
 
   const checkSingleItem = useCallback(async (item: StockItem) => {
     if (!item.cardrushUrl) return;
@@ -164,7 +164,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
     } finally {
       setCheckingItem(null);
     }
-  }, []);
+  }, [applyLiveResult]);
 
   const checkAllItems = useCallback(async () => {
     const unchecked = items.filter((i) => i.stockStatus === "pending" && i.cardrushUrl);
@@ -205,7 +205,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
     }
 
     setCheckingAll(false);
-  }, [items]);
+  }, [items, applyLiveResult]);
 
   function statusClasses(itemStatus: string, buttonStatus: string) {
     const active = itemStatus === buttonStatus;

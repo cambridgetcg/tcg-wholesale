@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { orders, orderItems, cards, clients, orderStatusHistory, cartItems } from "@/lib/db/schema";
-import { eq, and, gte } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
-import { calcDiscountPct } from "@/lib/get-volume-discount";
 import { sendOrderEmail } from "@/lib/email/send-order-email";
 
 export async function POST(req: NextRequest) {
@@ -42,10 +41,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Get client — recalculate discount from DB (never trust client-side value)
   const [client] = await db.select().from(clients).where(eq(clients.id, clientId)).limit(1);
   if (!client) return NextResponse.json({ error: "Client not found" }, { status: 404 });
-  const discountPct = calcDiscountPct(client.priorMonthSpend);
 
   // Resolve prices server-side from DB (never trust client-sent prices)
   let subtotal = 0;
@@ -67,40 +64,45 @@ export async function POST(req: NextRequest) {
 
   const now = new Date();
   const orderNotes = notes?.trim() || null;
-  const [order] = await db
-    .insert(orders)
-    .values({
-      clientId,
-      status: "submitted",
-      total: Math.round(subtotal * 100) / 100,
-      volumeDiscount: discountPct,
-      notes: idempotencyKey ? `__idem:${idempotencyKey}` : orderNotes,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
 
-  // Clear idempotency marker and set real notes
-  if (idempotencyKey && orderNotes) {
-    await db.update(orders).set({ notes: orderNotes }).where(eq(orders.id, order.id));
-  }
+  const order = await db.transaction(async (tx) => {
+    const [newOrder] = await tx
+      .insert(orders)
+      .values({
+        clientId,
+        status: "submitted",
+        total: Math.round(subtotal * 100) / 100,
+        volumeDiscount: 0,
+        notes: idempotencyKey ? `__idem:${idempotencyKey}` : orderNotes,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
 
-  for (const item of resolvedItems) {
-    await db.insert(orderItems).values({ orderId: order.id, ...item });
-  }
+    // Clear idempotency marker and set real notes
+    if (idempotencyKey && orderNotes) {
+      await tx.update(orders).set({ notes: orderNotes }).where(eq(orders.id, newOrder.id));
+    }
 
-  // Record initial status in audit log (non-fatal — table may not exist yet)
-  try {
-    await db.insert(orderStatusHistory).values({
-      orderId: order.id,
-      fromStatus: "new",
-      toStatus: "submitted",
-      changedBy: clientId,
-      changedAt: now,
-    });
-  } catch {
-    // Audit log failure should not block order submission
-  }
+    for (const item of resolvedItems) {
+      await tx.insert(orderItems).values({ orderId: newOrder.id, ...item });
+    }
+
+    // Record initial status in audit log
+    try {
+      await tx.insert(orderStatusHistory).values({
+        orderId: newOrder.id,
+        fromStatus: "new",
+        toStatus: "submitted",
+        changedBy: clientId,
+        changedAt: now,
+      });
+    } catch {
+      // Audit log failure should not block order submission
+    }
+
+    return newOrder;
+  });
 
   // Clear server-persisted cart (belt-and-suspenders — client clear() also fires DELETE)
   try {

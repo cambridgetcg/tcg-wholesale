@@ -102,7 +102,9 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   stockCheckedAt: timestamp("stock_checked_at"),
-});
+}, (table) => ({
+  clientIdIdx: index("orders_client_id_idx").on(table.clientId),
+}));
 
 export const orderItems = pgTable("order_items", {
   id: serial("id").primaryKey(),
@@ -119,7 +121,9 @@ export const orderItems = pgTable("order_items", {
   checkedQuantity: integer("checked_quantity"),
   remamboSubmittedAt: timestamp("remambo_submitted_at"),
   removedAt: timestamp("removed_at"),
-});
+}, (table) => ({
+  orderIdIdx: index("order_items_order_id_idx").on(table.orderId),
+}));
 
 export const priceHistory = pgTable("price_history", {
   id: serial("id").primaryKey(),

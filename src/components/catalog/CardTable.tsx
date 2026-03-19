@@ -25,7 +25,6 @@ export default function CardTable({
   cards,
   currentSort,
   currentOrder,
-  volumeDiscountPct,
   lastSynced,
   currentCategory = "singles",
   wantedIds = [],
@@ -33,7 +32,6 @@ export default function CardTable({
   cards: CardRow[];
   currentSort: string;
   currentOrder: string;
-  volumeDiscountPct: number;
   lastSynced: string | null;
   currentCategory?: string;
   wantedIds?: number[];
@@ -151,7 +149,6 @@ export default function CardTable({
         <tbody className="divide-y divide-[#1e1e2e]">
           {cards.map((card) => {
             const price = card.price ?? 0;
-            const discounted = price;
 
             return (
               <tr key={card.id} className="hover:bg-[#12121a] transition">
@@ -189,20 +186,9 @@ export default function CardTable({
                   )}
                 </td>
                 <td className="px-2 md:px-4 py-3 text-right">
-                  {volumeDiscountPct > 0 ? (
-                    <>
-                      <span className="text-gray-500 line-through mr-2">
-                        {"\u00a3"}{price.toFixed(2)}
-                      </span>
-                      <span className="font-medium text-green-400">
-                        {"\u00a3"}{discounted.toFixed(2)}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="font-medium text-green-400">
-                      {"\u00a3"}{price.toFixed(2)}
-                    </span>
-                  )}
+                  <span className="font-medium text-green-400">
+                    {"\u00a3"}{price.toFixed(2)}
+                  </span>
                 </td>
                 <td className="px-2 md:px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1 md:gap-2">

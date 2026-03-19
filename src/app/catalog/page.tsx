@@ -2,10 +2,8 @@ import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { cards, games, sets as setsTable, wantedCards } from "@/lib/db/schema";
 import { ilike, or, eq, asc, desc, count, max, gte, lte, sql, SQL, getTableColumns } from "drizzle-orm";
-import { getVolumeDiscountInfo } from "@/lib/get-volume-discount";
 import { auth } from "@/lib/auth";
 import Nav from "@/components/Nav";
-import Link from "next/link";
 import GameTabs from "@/components/catalog/GameTabs";
 import CategoryToggle from "@/components/catalog/CategoryToggle";
 import SearchBar from "@/components/catalog/SearchBar";
@@ -45,18 +43,15 @@ export default async function CatalogPage({
   const priceMin = params.priceMin?.trim() || "";
   const priceMax = params.priceMax?.trim() || "";
 
-  // Phase 1: parallel — discount info + game list + wanted IDs (no dependencies)
   const session = await auth();
   const clientId = session?.user?.id ? parseInt(session.user.id) : null;
 
-  const [discountInfo, allGames, wantedRows] = await Promise.all([
-    getVolumeDiscountInfo(),
+  const [allGames, wantedRows] = await Promise.all([
     db.select().from(games).orderBy(asc(games.sortOrder)),
     clientId
       ? db.select({ cardId: wantedCards.cardId }).from(wantedCards).where(eq(wantedCards.clientId, clientId))
       : Promise.resolve([]),
   ]);
-  const volumeDiscountPct = discountInfo.volumeDiscountPct;
   const wantedIds = wantedRows.map((r) => r.cardId);
 
   // Build where conditions
@@ -86,27 +81,14 @@ export default async function CatalogPage({
   // Category filter
   conditions.push(eq(cards.category, categoryFilter as "singles" | "sealed"));
 
-  // Price filter (apply against discounted price when user has a volume discount)
-  const discountMultiplier = 1 - volumeDiscountPct;
+  // Price filter
   if (priceMin) {
     const min = parseFloat(priceMin);
-    if (!isNaN(min)) {
-      conditions.push(
-        volumeDiscountPct > 0
-          ? sql`${cards.price} * ${discountMultiplier} >= ${min}`
-          : gte(cards.price, min)
-      );
-    }
+    if (!isNaN(min)) conditions.push(gte(cards.price, min));
   }
   if (priceMax) {
     const max_ = parseFloat(priceMax);
-    if (!isNaN(max_)) {
-      conditions.push(
-        volumeDiscountPct > 0
-          ? sql`${cards.price} * ${discountMultiplier} <= ${max_}`
-          : lte(cards.price, max_)
-      );
-    }
+    if (!isNaN(max_)) conditions.push(lte(cards.price, max_));
   }
 
   const whereClause = conditions.length > 0
@@ -140,7 +122,7 @@ export default async function CatalogPage({
     if (game) setConditions.push(eq(setsTable.gameId, game.id));
   }
 
-  // Phase 2: parallel — count, cards, sets, lastSynced (all depend on Phase 1)
+  // Phase 2: parallel — count, cards, sets, lastSynced
   const [countResult, allCards, setRows, lastSyncedResult] = await Promise.all([
     db.select({ total: count() }).from(cards).where(whereClause),
     db.select(getTableColumns(cards))
@@ -193,33 +175,11 @@ export default async function CatalogPage({
             </Suspense>
           </div>
 
-          {/* Discount banner */}
-          {volumeDiscountPct > 0 ? (
-            <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-sm">
-              <span className="text-gray-400">
-                Your discount:{" "}
-                <span className="font-semibold text-green-400">{(volumeDiscountPct * 100).toFixed(0)}%</span>
-                {" "}off all prices
-              </span>
-              <Link href="/discount" className="ml-3 text-brand-400 hover:text-brand-300 transition">
-                View tiers &rarr;
-              </Link>
-            </div>
-          ) : (
-            <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#12121a] px-4 py-3 text-sm">
-              <span className="text-gray-400">Volume discounts available &mdash; </span>
-              <Link href="/discount" className="text-brand-400 hover:text-brand-300 transition">
-                See how to save &rarr;
-              </Link>
-            </div>
-          )}
-
           <Suspense>
             <CardTable
               cards={allCards}
               currentSort={sortField}
               currentOrder={sortOrder}
-              volumeDiscountPct={volumeDiscountPct}
               lastSynced={lastSynced instanceof Date ? lastSynced.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : null}
               currentCategory={categoryFilter}
               wantedIds={wantedIds}

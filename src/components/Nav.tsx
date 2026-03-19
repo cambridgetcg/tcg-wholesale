@@ -16,7 +16,7 @@ function useIsAdminHost() {
 export default function Nav() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
-  const { itemCount, discountedTotal, flushSync } = useCart();
+  const { itemCount, total, flushSync } = useCart();
   const isAdminHost = useIsAdminHost();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -44,7 +44,7 @@ export default function Nav() {
             >
               <span>Cart ({itemCount})</span>
               <span className="text-green-400 font-medium">
-                &pound;{discountedTotal.toFixed(2)}
+                &pound;{total.toFixed(2)}
               </span>
             </Link>
           )}
@@ -96,7 +96,7 @@ export default function Nav() {
                 >
                   <span>Cart ({itemCount})</span>
                   <span className="text-green-400 font-medium">
-                    &pound;{discountedTotal.toFixed(2)}
+                    &pound;{total.toFixed(2)}
                   </span>
                 </Link>
               )}
@@ -134,9 +134,6 @@ export default function Nav() {
               </Link>
               <Link href="/fulfillment" className="hover:text-brand-500 transition" onClick={() => setMenuOpen(false)}>
                 Fulfillment
-              </Link>
-              <Link href="/discount" className="hover:text-brand-500 transition" onClick={() => setMenuOpen(false)}>
-                Discounts
               </Link>
               <Link href="/margin" className="hover:text-brand-500 transition" onClick={() => setMenuOpen(false)}>
                 Margins

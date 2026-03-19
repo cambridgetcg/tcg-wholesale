@@ -13,11 +13,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const { price } = await req.json() as { price: number };
 
+  if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+    return NextResponse.json({ error: "Price must be a finite positive number" }, { status: 400 });
+  }
+
   const [updated] = await db
     .update(cards)
     .set({ price, lastSyncedAt: new Date() })
     .where(eq(cards.id, parseInt(id)))
     .returning();
+
+  if (!updated) {
+    return NextResponse.json({ error: "Card not found" }, { status: 404 });
+  }
 
   return NextResponse.json(updated);
 }

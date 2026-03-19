@@ -33,9 +33,7 @@ interface CartContextValue {
   flushSync: () => Promise<void>;
   refreshPrices: () => Promise<void>;
   total: number;
-  discountedTotal: number;
   itemCount: number;
-  volumeDiscountPct: number;
   priceChanges: PriceChange[];
   dismissPriceChanges: () => void;
   isRefreshing: boolean;
@@ -75,13 +73,7 @@ function mergeItems(local: CartItem[], server: CartItem[]): CartItem[] {
   return Array.from(map.values());
 }
 
-export function CartProvider({
-  children,
-  volumeDiscountPct = 0,
-}: {
-  children: ReactNode;
-  volumeDiscountPct?: number;
-}) {
+export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [priceChanges, setPriceChanges] = useState<PriceChange[]>([]);
@@ -259,8 +251,6 @@ export function CartProvider({
     [items]
   );
 
-  const discountedTotal = total;
-
   const itemCount = useMemo(
     () => items.reduce((sum, i) => sum + i.quantity, 0),
     [items]
@@ -277,9 +267,7 @@ export function CartProvider({
         flushSync,
         refreshPrices,
         total,
-        discountedTotal,
         itemCount,
-        volumeDiscountPct,
         priceChanges,
         dismissPriceChanges,
         isRefreshing,

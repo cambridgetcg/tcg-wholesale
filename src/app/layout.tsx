@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Providers } from "./providers";
-import { getVolumeDiscount } from "@/lib/get-volume-discount";
 
 export const metadata: Metadata = {
   title: "TCG Wholesale",
@@ -13,13 +12,11 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const volumeDiscountPct = await getVolumeDiscount();
-
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
       <body className="min-h-screen bg-[#0a0a0f] text-gray-100 antialiased">
-        <Providers volumeDiscountPct={volumeDiscountPct}>
+        <Providers>
           {children}
         </Providers>
       </body>

@@ -30,7 +30,6 @@ export default async function OrdersPage() {
       id: orders.id,
       status: orders.status,
       total: orders.total,
-      volumeDiscount: orders.volumeDiscount,
       createdAt: orders.createdAt,
       clientId: orders.clientId,
       itemCount: sql<number>`coalesce(${itemCounts.itemCount}, 0)`.as("item_count"),
