@@ -47,6 +47,9 @@ const fromCard  = kvArgs["--from"]       ? Number(kvArgs["--from"])       : 1;  
 const batchSize = kvArgs["--batch-size"] ? Number(kvArgs["--batch-size"]) : 39;  // Remambo cart max
 const resume    = kvArgs["--resume"] ?? null; // path to previous manifest JSON — retry failed items only
 const setCode   = kvArgs["--set"]        ?? null; // e.g. --set=OP14; if omitted, defaults to P-% promos
+const source    = kvArgs["--source"]    ?? "tiers"; // "tiers" (price-tier qty) or "targets" (stock target shortfall)
+const minPrice  = kvArgs["--min-price"] ? Number(kvArgs["--min-price"]) : null; // GBP minimum price filter
+const maxPrice  = kvArgs["--max-price"] ? Number(kvArgs["--max-price"]) : null; // GBP maximum price filter
 
 if (!dryRun && !headed) {
   console.error("Safety: pass --dry-run to preview, or --headed to run with a visible browser.");
@@ -92,6 +95,66 @@ function tierQty(priceJpy: number): number {
 // ---------------------------------------------------------------------------
 
 async function queryPromoCards(sql: postgres.Sql): Promise<PromoCard[]> {
+  // Stock-targets source: qty = target_qty - stock - pending_stock
+  if (source === "targets") {
+    const minP = minPrice ?? 0;
+    const maxP = maxPrice ?? 999999;
+    const rows = setCode
+      ? await sql`
+          SELECT
+            c.id        AS card_id,
+            c.card_number,
+            c.name,
+            c.set_code,
+            c.cardrush_url,
+            c.cardrush_jpy,
+            c.stock,
+            c.price::float AS price_gbp,
+            GREATEST(COALESCE(st.target_qty, 0) - c.stock - c.pending_stock, 0) AS to_order_qty
+          FROM cards c
+          LEFT JOIN stock_targets st
+            ON c.price >= st.price_min AND c.price < st.price_max
+          WHERE c.category = 'singles'
+            AND c.price IS NOT NULL AND c.price > 0
+            AND c.cardrush_url IS NOT NULL AND c.cardrush_url != ''
+            AND c.cardrush_jpy > 0
+            AND c.set_code = ${setCode}
+            AND c.price >= ${minP}
+            AND c.price <= ${maxP}
+            AND COALESCE(st.target_qty, 0) - c.stock - c.pending_stock > 0
+          ORDER BY c.cardrush_jpy ASC, c.card_number ASC
+        `
+      : await sql`
+          SELECT
+            c.id        AS card_id,
+            c.card_number,
+            c.name,
+            c.set_code,
+            c.cardrush_url,
+            c.cardrush_jpy,
+            c.stock,
+            c.price::float AS price_gbp,
+            GREATEST(COALESCE(st.target_qty, 0) - c.stock - c.pending_stock, 0) AS to_order_qty
+          FROM cards c
+          LEFT JOIN stock_targets st
+            ON c.price >= st.price_min AND c.price < st.price_max
+          WHERE c.category = 'singles'
+            AND c.price IS NOT NULL AND c.price > 0
+            AND c.cardrush_url IS NOT NULL AND c.cardrush_url != ''
+            AND c.cardrush_jpy > 0
+            AND c.price >= ${minP}
+            AND c.price <= ${maxP}
+            AND COALESCE(st.target_qty, 0) - c.stock - c.pending_stock > 0
+          ORDER BY c.cardrush_jpy ASC, c.card_number ASC
+        `;
+    return (rows as any[]).map((r) => ({
+      ...r,
+      cardrush_jpy: Number(r.cardrush_jpy),
+      qty: Number(r.to_order_qty),
+    }));
+  }
+
+  // Default: price-tier source
   const rows = setCode
     ? await sql`
         SELECT
@@ -187,14 +250,24 @@ async function login(page: Page): Promise<void> {
   }
 }
 
-async function submitCard(page: Page, card: PromoCard): Promise<void> {
+async function submitCard(page: Page, card: PromoCard): Promise<{ livePrice: number | null }> {
   await page.goto("https://www.remambo.jp/neworder", { waitUntil: "networkidle" });
   await page.fill('input[name="url"]', card.cardrush_url);
   await page.click("button.button");
   await page.waitForLoadState("networkidle");
 
+  // Read Remambo's auto-detected price (live from the site)
+  const priceInput = page.locator('input[name="price"]');
+  const autoPrice = await priceInput.inputValue();
+  const livePrice = autoPrice ? Number(autoPrice) : null;
+
+  // Use the lower of DB price vs live price (never overpay)
+  const finalPrice = livePrice && livePrice > 0
+    ? Math.min(card.cardrush_jpy, livePrice)
+    : card.cardrush_jpy;
+
   await page.fill('input[name="title"]', `${card.card_number} ${card.name}`);
-  await page.fill('input[name="price"]',    String(card.cardrush_jpy));
+  await page.fill('input[name="price"]',    String(finalPrice));
   await page.fill('input[name="qty"]',      String(card.qty));
   await page.fill('input[name="shipping"]', "0");
   await page.fill(
@@ -207,6 +280,8 @@ async function submitCard(page: Page, card: PromoCard): Promise<void> {
 
   await page.click("button.button");
   await page.waitForLoadState("networkidle");
+
+  return { livePrice };
 }
 
 // Re-create a fresh browser page — used on reconnect after session drop
@@ -296,7 +371,7 @@ async function main() {
       const manifest: ManifestEntry[] = [];
       for (const c of cards) {
         console.log(
-          `  ${c.card_number.padEnd(14)} ${c.name.substring(0, 28).padEnd(29)} x${c.qty}  @¥${c.cardrush_jpy.toLocaleString().padStart(6)}  =¥${(c.qty * c.cardrush_jpy).toLocaleString()}`
+          `  ${c.card_number.padEnd(14)} ${c.name.substring(0, 28).padEnd(29)} x${c.qty}  @¥${c.cardrush_jpy.toLocaleString().padStart(6)}  =¥${(c.qty * c.cardrush_jpy).toLocaleString()}${(c as any).price_gbp ? `  £${(c as any).price_gbp.toFixed(2)}` : ""}`
         );
         manifest.push({
           card_id: c.card_id, card_number: c.card_number, name: c.name,
@@ -338,9 +413,13 @@ async function main() {
       };
 
       try {
-        await submitCard(page, c);
+        const { livePrice } = await submitCard(page, c);
         submitted++;
-        console.log("OK");
+        if (livePrice && livePrice < c.cardrush_jpy) {
+          console.log(`OK (live ¥${livePrice.toLocaleString()} < DB ¥${c.cardrush_jpy.toLocaleString()}, used lower)`);
+        } else {
+          console.log("OK");
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         // Browser/context dropped — reconnect and retry once
@@ -348,9 +427,13 @@ async function main() {
           console.log("(reconnecting...)");
           try {
             page = await newPage(browser);
-            await submitCard(page, c);
+            const { livePrice } = await submitCard(page, c);
             submitted++;
-            console.log("OK (after reconnect)");
+            if (livePrice && livePrice < c.cardrush_jpy) {
+              console.log(`OK after reconnect (live ¥${livePrice.toLocaleString()} < DB ¥${c.cardrush_jpy.toLocaleString()}, used lower)`);
+            } else {
+              console.log("OK (after reconnect)");
+            }
           } catch (retryErr) {
             failed++;
             entry.status = "failed";

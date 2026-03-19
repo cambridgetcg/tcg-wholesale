@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef, ReactNode } from "react";
-import { applyVolumeDiscount } from "@/lib/pricing";
+
 
 export interface CardData {
   id: number;
@@ -206,10 +206,7 @@ export function CartProvider({
     [items]
   );
 
-  const discountedTotal = useMemo(
-    () => applyVolumeDiscount(total, volumeDiscountPct),
-    [total, volumeDiscountPct]
-  );
+  const discountedTotal = total;
 
   const itemCount = useMemo(
     () => items.reduce((sum, i) => sum + i.quantity, 0),

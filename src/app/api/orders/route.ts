@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { orders, orderItems, cards, clients, orderStatusHistory, cartItems } from "@/lib/db/schema";
 import { eq, and, gte } from "drizzle-orm";
 import { auth } from "@/lib/auth";
-import { applyVolumeDiscount } from "@/lib/pricing";
 import { calcDiscountPct } from "@/lib/get-volume-discount";
 import { sendOrderEmail } from "@/lib/email/send-order-email";
 
@@ -60,7 +59,7 @@ export async function POST(req: NextRequest) {
     if (card.price == null || card.price <= 0) {
       return NextResponse.json({ error: `Card ${card.cardNumber} has no valid price` }, { status: 400 });
     }
-    const unitPrice = applyVolumeDiscount(card.price, discountPct);
+    const unitPrice = card.price;
     const lineTotal = Math.round(unitPrice * item.quantity * 100) / 100;
     subtotal += lineTotal;
     resolvedItems.push({ cardId: item.cardId, quantity: item.quantity, unitPrice, lineTotal });

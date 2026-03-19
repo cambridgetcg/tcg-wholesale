@@ -247,10 +247,24 @@ async function submitItem(page: Page, item: UnfulfilledItem): Promise<void> {
   await page.click("button.button");
   await page.waitForLoadState("networkidle");
 
+  // Read Remambo's auto-detected price (live from the site)
+  const priceInput = page.locator('input[name="price"]');
+  const autoPrice = await priceInput.inputValue();
+  const livePrice = autoPrice ? Number(autoPrice) : null;
+
+  // Use the lower of DB price vs live price (never overpay)
+  const finalPrice = livePrice && livePrice > 0
+    ? Math.min(item.cardrush_jpy, livePrice)
+    : item.cardrush_jpy;
+
+  if (livePrice && livePrice < item.cardrush_jpy) {
+    process.stdout.write(`[live ¥${livePrice} < DB ¥${item.cardrush_jpy}] `);
+  }
+
   // Step 2: Fill order details
   const title = `${item.card_number} ${item.name}`;
   await page.fill('input[name="title"]', title);
-  await page.fill('input[name="price"]', String(item.cardrush_jpy));
+  await page.fill('input[name="price"]', String(finalPrice));
   await page.fill('input[name="qty"]', String(item.unfulfilled_qty));
   await page.fill('input[name="shipping"]', "0");
   await page.fill(

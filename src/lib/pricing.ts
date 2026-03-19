@@ -1,6 +1,6 @@
-export const MARGIN_PCT = 0.22;
+export const MARGIN_PCT = 0.08;
 export const PER_CARD_FEE = 0.22;
-export const SEALED_MARGIN_PCT = 0.18;
+export const SEALED_MARGIN_PCT = 0.08;
 export const SEALED_FLAT_FEE = 2.20;
 export const VAT_MULTIPLIER = 1.20;
 
@@ -37,10 +37,6 @@ export function calculatePriceByCategory(
   return category === "sealed"
     ? calculateSealedPrice(cardrushJpy, gbpJpyRate)
     : calculatePrice(cardrushJpy, gbpJpyRate);
-}
-
-export function applyVolumeDiscount(price: number, discountFraction: number): number {
-  return round2(price * (1 - discountFraction));
 }
 
 function round2(n: number): number {

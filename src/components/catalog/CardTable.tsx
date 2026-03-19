@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCart, type CardData } from "@/lib/cart-context";
-import { applyVolumeDiscount } from "@/lib/pricing";
+
 import { useCatalogFilter } from "./CatalogFilterContext";
 import WatermarkedImage from "./WatermarkedImage";
 
@@ -151,9 +151,7 @@ export default function CardTable({
         <tbody className="divide-y divide-[#1e1e2e]">
           {cards.map((card) => {
             const price = card.price ?? 0;
-            const discounted = volumeDiscountPct > 0
-              ? applyVolumeDiscount(price, volumeDiscountPct)
-              : price;
+            const discounted = price;
 
             return (
               <tr key={card.id} className="hover:bg-[#12121a] transition">
