@@ -28,7 +28,7 @@ test.describe("Mobile layout", () => {
     // Verify links present
     await expect(mobileMenu.locator("a", { hasText: "Catalog" })).toBeVisible();
     await expect(mobileMenu.locator("a", { hasText: "Orders" })).toBeVisible();
-    await expect(mobileMenu.locator("a", { hasText: "Discounts" })).toBeVisible();
+    await expect(mobileMenu.locator("a", { hasText: "Margins" })).toBeVisible();
 
     // Close menu
     await hamburger.click();
@@ -49,10 +49,10 @@ test.describe("Mobile layout", () => {
     await page.locator("nav div.md\\:hidden.mt-3 a", { hasText: "Orders" }).click();
     await expect(page).toHaveURL(/\/orders/);
 
-    // Discounts
+    // Margins
     await hamburger.click();
-    await page.locator("nav div.md\\:hidden.mt-3 a", { hasText: "Discounts" }).click();
-    await expect(page).toHaveURL(/\/discount/);
+    await page.locator("nav div.md\\:hidden.mt-3 a", { hasText: "Margins" }).click();
+    await expect(page).toHaveURL(/\/margin/);
   });
 
   test("Catalog: low-priority columns hidden", async ({ page }) => {
@@ -169,27 +169,16 @@ test.describe("Mobile layout", () => {
     await expect(page.locator("thead th", { hasText: "Date" })).toBeHidden();
   });
 
-  test("Discount: grids stack vertically", async ({ page }) => {
+  test("Margin calculator: renders on mobile", async ({ page }) => {
     await adminLogin(page);
 
-    await page.goto("/discount");
+    await page.goto("/margin");
     await expect(
-      page.locator("h1", { hasText: "Volume Discounts" }),
+      page.locator("h1", { hasText: "Margin Calculator" }),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Find the first grid with stat items (grid-cols-1 sm:grid-cols-2)
-    const grid = page.locator("div.grid").first();
-    const items = grid.locator("> div");
-    const count = await items.count();
-    expect(count).toBeGreaterThanOrEqual(2);
-
-    // At 375px (below sm breakpoint), items should stack vertically
-    const firstBox = await items.nth(0).boundingBox();
-    const secondBox = await items.nth(1).boundingBox();
-    expect(firstBox).not.toBeNull();
-    expect(secondBox).not.toBeNull();
-
-    // Second item's top should be below the first item's bottom
-    expect(secondBox!.y).toBeGreaterThanOrEqual(firstBox!.y + firstBox!.height - 1);
+    // Inputs should be visible
+    const jpyInput = page.locator("input").first();
+    await expect(jpyInput).toBeVisible();
   });
 });
