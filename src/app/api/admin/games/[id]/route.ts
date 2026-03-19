@@ -18,6 +18,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.active !== undefined) updates.active = body.active;
   if (body.imageUrl !== undefined) updates.imageUrl = body.imageUrl;
 
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: "No fields to update" }, { status: 400 });
+  }
+
   await db.update(games).set(updates).where(eq(games.id, Number(id)));
   return NextResponse.json({ success: true });
 }

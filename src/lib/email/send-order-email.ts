@@ -127,6 +127,9 @@ export async function sendOrderEmail(
         ({ subject, html } = newOrderAdmin(orderData, clientData, itemCount));
         break;
       }
+
+      default:
+        return;
     }
 
     // 5. Send via Resend or fallback to console

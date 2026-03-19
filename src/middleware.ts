@@ -71,6 +71,14 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/catalog", req.url));
   }
 
+  // --- Admin API role check (defense-in-depth for preview deploys) ---
+  if (pathname.startsWith("/api/admin/") && req.auth?.user?.role !== "admin") {
+    return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   return NextResponse.next();
 });
 
