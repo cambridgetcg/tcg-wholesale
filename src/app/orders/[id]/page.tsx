@@ -61,12 +61,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const isQuoted = order.status === "quoted";
   const quoteExpired = isQuoted && order.quotedExpiresAt && order.quotedExpiresAt < new Date();
 
-  // Compute full totals
-  const discountPct = order.volumeDiscount;
-  const preDiscountSubtotal = discountPct > 0
-    ? Math.round((order.total / (1 - discountPct)) * 100) / 100
-    : order.total;
-  const discountAmount = Math.round((preDiscountSubtotal - order.total) * 100) / 100;
+  // Volume discounts removed — total is the final price
+  const preDiscountSubtotal = order.total;
+  const discountAmount = 0;
 
   return (
     <>
@@ -129,12 +126,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 <span className="text-gray-400">Subtotal</span>
                 <span>&pound;{preDiscountSubtotal.toFixed(2)}</span>
               </div>
-              {discountPct > 0 && (
-                <div className="flex justify-between text-green-400">
-                  <span>Volume Discount ({(discountPct * 100).toFixed(0)}%)</span>
-                  <span>-&pound;{discountAmount.toFixed(2)}</span>
-                </div>
-              )}
+
               <div className="border-t border-[#1e1e2e] pt-2 flex justify-between text-lg font-bold">
                 <span>Total</span>
                 <span className="text-green-400">&pound;{order.total.toFixed(2)}</span>

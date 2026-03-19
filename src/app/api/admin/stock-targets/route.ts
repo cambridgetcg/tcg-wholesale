@@ -30,6 +30,11 @@ export async function POST(req: NextRequest) {
   }
 
   const { priceMin, priceMax, targetQty } = await req.json();
+  if (typeof priceMin !== "number" || typeof priceMax !== "number" || typeof targetQty !== "number"
+    || !Number.isFinite(priceMin) || !Number.isFinite(priceMax) || !Number.isFinite(targetQty)
+    || priceMin < 0 || priceMax < 0 || targetQty < 0 || priceMin > priceMax) {
+    return NextResponse.json({ error: "Invalid values: need finite non-negative numbers with priceMin <= priceMax" }, { status: 400 });
+  }
   const [row] = await db
     .insert(stockTargets)
     .values({ priceMin, priceMax, targetQty })
@@ -43,6 +48,11 @@ export async function PUT(req: NextRequest) {
   }
 
   const { id, priceMin, priceMax, targetQty } = await req.json();
+  if (typeof priceMin !== "number" || typeof priceMax !== "number" || typeof targetQty !== "number"
+    || !Number.isFinite(priceMin) || !Number.isFinite(priceMax) || !Number.isFinite(targetQty)
+    || priceMin < 0 || priceMax < 0 || targetQty < 0 || priceMin > priceMax) {
+    return NextResponse.json({ error: "Invalid values: need finite non-negative numbers with priceMin <= priceMax" }, { status: 400 });
+  }
   const [row] = await db
     .update(stockTargets)
     .set({ priceMin, priceMax, targetQty })

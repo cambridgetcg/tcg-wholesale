@@ -18,6 +18,8 @@ export async function POST(req: NextRequest) {
   const { items, notes, idempotencyKey } = body;
 
   if (!items?.length) return NextResponse.json({ error: "No items" }, { status: 400 });
+  if (notes && notes.length > 2000) return NextResponse.json({ error: "Notes too long (max 2000 chars)" }, { status: 400 });
+  if (idempotencyKey && idempotencyKey.length > 100) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
 
   // Validate quantities
   for (const item of items) {

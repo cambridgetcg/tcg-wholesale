@@ -1,0 +1,206 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "TCG Wholesale" [ref=e4] [cursor=pointer]:
+        - /url: /admin
+      - button "Toggle menu" [ref=e6] [cursor=pointer]
+  - generic [ref=e10]:
+    - generic [ref=e11]:
+      - link "Dashboard" [ref=e12] [cursor=pointer]:
+        - /url: /admin
+      - link "Orders" [ref=e13] [cursor=pointer]:
+        - /url: /admin/orders
+      - link "Prices" [ref=e14] [cursor=pointer]:
+        - /url: /admin/prices
+      - link "Games" [ref=e15] [cursor=pointer]:
+        - /url: /admin/games
+      - link "Clients" [ref=e16] [cursor=pointer]:
+        - /url: /admin/clients
+      - link "Stock" [ref=e17] [cursor=pointer]:
+        - /url: /admin/stock
+      - link "Levels" [ref=e18] [cursor=pointer]:
+        - /url: /admin/stock-levels
+      - link "Targets" [ref=e19] [cursor=pointer]:
+        - /url: /admin/stock-targets
+      - link "To Order" [ref=e20] [cursor=pointer]:
+        - /url: /admin/to-order
+      - link "Purchases" [ref=e21] [cursor=pointer]:
+        - /url: /admin/purchases
+      - link "Wanted" [ref=e22] [cursor=pointer]:
+        - /url: /admin/wanted
+    - generic [ref=e23]:
+      - heading "Manage Orders" [level=1] [ref=e24]
+      - generic [ref=e25]:
+        - button "All" [ref=e26] [cursor=pointer]
+        - button "Submitted(2)" [ref=e27] [cursor=pointer]:
+          - text: Submitted
+          - generic [ref=e28]: (2)
+        - button "Quoted(0)" [ref=e29] [cursor=pointer]:
+          - text: Quoted
+          - generic [ref=e30]: (0)
+        - button "Confirmed(0)" [ref=e31] [cursor=pointer]:
+          - text: Confirmed
+          - generic [ref=e32]: (0)
+        - button "Paid(0)" [ref=e33] [cursor=pointer]:
+          - text: Paid
+          - generic [ref=e34]: (0)
+        - button "Ordered(0)" [ref=e35] [cursor=pointer]:
+          - text: Ordered
+          - generic [ref=e36]: (0)
+        - button "Shipped(0)" [ref=e37] [cursor=pointer]:
+          - text: Shipped
+          - generic [ref=e38]: (0)
+        - button "Delivered(16)" [ref=e39] [cursor=pointer]:
+          - text: Delivered
+          - generic [ref=e40]: (16)
+        - button "Cancelled(0)" [ref=e41] [cursor=pointer]:
+          - text: Cancelled
+          - generic [ref=e42]: (0)
+      - table [ref=e44]:
+        - rowgroup [ref=e45]:
+          - 'row "Order # Total Status Actions" [ref=e46]':
+            - columnheader [ref=e47]
+            - 'columnheader "Order #" [ref=e48]'
+            - columnheader "Total" [ref=e49]
+            - columnheader "Status" [ref=e50]
+            - columnheader "Actions" [ref=e51]
+        - rowgroup [ref=e52]:
+          - 'row "▶ #46 £12.66 Delivered" [ref=e53] [cursor=pointer]':
+            - cell "▶" [ref=e54]
+            - cell "#46" [ref=e55]
+            - cell "£12.66" [ref=e56]
+            - cell "Delivered" [ref=e57]:
+              - generic [ref=e58]: Delivered
+            - cell [ref=e59]
+          - 'row "▶ #45 £12.66 Delivered" [ref=e60] [cursor=pointer]':
+            - cell "▶" [ref=e61]
+            - cell "#45" [ref=e62]
+            - cell "£12.66" [ref=e63]
+            - cell "Delivered" [ref=e64]:
+              - generic [ref=e65]: Delivered
+            - cell [ref=e66]
+          - 'row "▶ #44 £12.66 Delivered" [ref=e67] [cursor=pointer]':
+            - cell "▶" [ref=e68]
+            - cell "#44" [ref=e69]
+            - cell "£12.66" [ref=e70]
+            - cell "Delivered" [ref=e71]:
+              - generic [ref=e72]: Delivered
+            - cell [ref=e73]
+          - 'row "▶ #43 £12.66 Delivered" [ref=e74] [cursor=pointer]':
+            - cell "▶" [ref=e75]
+            - cell "#43" [ref=e76]
+            - cell "£12.66" [ref=e77]
+            - cell "Delivered" [ref=e78]:
+              - generic [ref=e79]: Delivered
+            - cell [ref=e80]
+          - 'row "▶ #42 £12.66 Delivered" [ref=e81] [cursor=pointer]':
+            - cell "▶" [ref=e82]
+            - cell "#42" [ref=e83]
+            - cell "£12.66" [ref=e84]
+            - cell "Delivered" [ref=e85]:
+              - generic [ref=e86]: Delivered
+            - cell [ref=e87]
+          - 'row "▶ #41 £12.66 Delivered" [ref=e88] [cursor=pointer]':
+            - cell "▶" [ref=e89]
+            - cell "#41" [ref=e90]
+            - cell "£12.66" [ref=e91]
+            - cell "Delivered" [ref=e92]:
+              - generic [ref=e93]: Delivered
+            - cell [ref=e94]
+          - 'row "▶ #40 £12.66 Submitted Check Stock Cancel" [ref=e95] [cursor=pointer]':
+            - cell "▶" [ref=e96]
+            - cell "#40" [ref=e97]
+            - cell "£12.66" [ref=e98]
+            - cell "Submitted" [ref=e99]:
+              - generic [ref=e100]: Submitted
+            - cell "Check Stock Cancel" [ref=e101]:
+              - generic [ref=e102]:
+                - link "Check Stock" [ref=e103]:
+                  - /url: /admin/orders/40/stock-check
+                - button "Cancel" [ref=e104]
+          - 'row "▶ #39 £12.66 Submitted Check Stock Cancel" [ref=e105] [cursor=pointer]':
+            - cell "▶" [ref=e106]
+            - cell "#39" [ref=e107]
+            - cell "£12.66" [ref=e108]
+            - cell "Submitted" [ref=e109]:
+              - generic [ref=e110]: Submitted
+            - cell "Check Stock Cancel" [ref=e111]:
+              - generic [ref=e112]:
+                - link "Check Stock" [ref=e113]:
+                  - /url: /admin/orders/39/stock-check
+                - button "Cancel" [ref=e114]
+          - 'row "▶ #38 £12.66 Delivered" [ref=e115] [cursor=pointer]':
+            - cell "▶" [ref=e116]
+            - cell "#38" [ref=e117]
+            - cell "£12.66" [ref=e118]
+            - cell "Delivered" [ref=e119]:
+              - generic [ref=e120]: Delivered
+            - cell [ref=e121]
+          - 'row "▶ #37 £12.66 Delivered" [ref=e122] [cursor=pointer]':
+            - cell "▶" [ref=e123]
+            - cell "#37" [ref=e124]
+            - cell "£12.66" [ref=e125]
+            - cell "Delivered" [ref=e126]:
+              - generic [ref=e127]: Delivered
+            - cell [ref=e128]
+          - 'row "▶ #36 £12.66 Delivered" [ref=e129] [cursor=pointer]':
+            - cell "▶" [ref=e130]
+            - cell "#36" [ref=e131]
+            - cell "£12.66" [ref=e132]
+            - cell "Delivered" [ref=e133]:
+              - generic [ref=e134]: Delivered
+            - cell [ref=e135]
+          - 'row "▶ #35 £12.66 Delivered" [ref=e136] [cursor=pointer]':
+            - cell "▶" [ref=e137]
+            - cell "#35" [ref=e138]
+            - cell "£12.66" [ref=e139]
+            - cell "Delivered" [ref=e140]:
+              - generic [ref=e141]: Delivered
+            - cell [ref=e142]
+          - 'row "▶ #34 £12.66 Delivered" [ref=e143] [cursor=pointer]':
+            - cell "▶" [ref=e144]
+            - cell "#34" [ref=e145]
+            - cell "£12.66" [ref=e146]
+            - cell "Delivered" [ref=e147]:
+              - generic [ref=e148]: Delivered
+            - cell [ref=e149]
+          - 'row "▶ #33 £8525.23 Delivered" [ref=e150] [cursor=pointer]':
+            - cell "▶" [ref=e151]
+            - cell "#33" [ref=e152]
+            - cell "£8525.23" [ref=e153]
+            - cell "Delivered" [ref=e154]:
+              - generic [ref=e155]: Delivered
+            - cell [ref=e156]
+          - 'row "▶ #32 £1940.00 Delivered" [ref=e157] [cursor=pointer]':
+            - cell "▶" [ref=e158]
+            - cell "#32" [ref=e159]
+            - cell "£1940.00" [ref=e160]
+            - cell "Delivered" [ref=e161]:
+              - generic [ref=e162]: Delivered
+            - cell [ref=e163]
+          - 'row "▶ #31 £5002.20 Delivered" [ref=e164] [cursor=pointer]':
+            - cell "▶" [ref=e165]
+            - cell "#31" [ref=e166]
+            - cell "£5002.20" [ref=e167]
+            - cell "Delivered" [ref=e168]:
+              - generic [ref=e169]: Delivered
+            - cell [ref=e170]
+          - 'row "▶ #28 £3700.00 Delivered" [ref=e171] [cursor=pointer]':
+            - cell "▶" [ref=e172]
+            - cell "#28" [ref=e173]
+            - cell "£3700.00" [ref=e174]
+            - cell "Delivered" [ref=e175]:
+              - generic [ref=e176]: Delivered
+            - cell [ref=e177]
+          - 'row "▶ #27 £520.00 Delivered" [ref=e178] [cursor=pointer]':
+            - cell "▶" [ref=e179]
+            - cell "#27" [ref=e180]
+            - cell "£520.00" [ref=e181]
+            - cell "Delivered" [ref=e182]:
+              - generic [ref=e183]: Delivered
+            - cell [ref=e184]
+  - alert [ref=e185]
+```

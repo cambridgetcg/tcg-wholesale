@@ -1,0 +1,292 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - navigation [ref=e2]:
+    - generic [ref=e3]:
+      - link "TCG Wholesale" [ref=e4] [cursor=pointer]:
+        - /url: /admin
+      - generic [ref=e5]:
+        - link "Dashboard" [ref=e6] [cursor=pointer]:
+          - /url: /admin
+        - link "Storefront" [ref=e7] [cursor=pointer]:
+          - /url: "https://wholesaletcgdirect.com\n"
+        - generic [ref=e8]: admin@cambridgetcg.com
+        - button "Sign Out" [ref=e9] [cursor=pointer]
+  - generic [ref=e10]:
+    - generic [ref=e11]:
+      - link "Dashboard" [ref=e12] [cursor=pointer]:
+        - /url: /admin
+      - link "Orders" [ref=e13] [cursor=pointer]:
+        - /url: /admin/orders
+      - link "Prices" [ref=e14] [cursor=pointer]:
+        - /url: /admin/prices
+      - link "Games" [ref=e15] [cursor=pointer]:
+        - /url: /admin/games
+      - link "Clients" [ref=e16] [cursor=pointer]:
+        - /url: /admin/clients
+      - link "Stock" [ref=e17] [cursor=pointer]:
+        - /url: /admin/stock
+      - link "Levels" [ref=e18] [cursor=pointer]:
+        - /url: /admin/stock-levels
+      - link "Targets" [ref=e19] [cursor=pointer]:
+        - /url: /admin/stock-targets
+      - link "To Order" [ref=e20] [cursor=pointer]:
+        - /url: /admin/to-order
+      - link "Purchases" [ref=e21] [cursor=pointer]:
+        - /url: /admin/purchases
+      - link "Wanted" [ref=e22] [cursor=pointer]:
+        - /url: /admin/wanted
+    - generic [ref=e23]:
+      - heading "Manage Orders" [level=1] [ref=e24]
+      - generic [ref=e25]:
+        - button "All" [ref=e26] [cursor=pointer]
+        - button "Submitted(2)" [ref=e27] [cursor=pointer]:
+          - text: Submitted
+          - generic [ref=e28]: (2)
+        - button "Quoted(0)" [ref=e29] [cursor=pointer]:
+          - text: Quoted
+          - generic [ref=e30]: (0)
+        - button "Confirmed(0)" [ref=e31] [cursor=pointer]:
+          - text: Confirmed
+          - generic [ref=e32]: (0)
+        - button "Paid(0)" [ref=e33] [cursor=pointer]:
+          - text: Paid
+          - generic [ref=e34]: (0)
+        - button "Ordered(1)" [ref=e35] [cursor=pointer]:
+          - text: Ordered
+          - generic [ref=e36]: (1)
+        - button "Shipped(0)" [ref=e37] [cursor=pointer]:
+          - text: Shipped
+          - generic [ref=e38]: (0)
+        - button "Delivered(15)" [ref=e39] [cursor=pointer]:
+          - text: Delivered
+          - generic [ref=e40]: (15)
+        - button "Cancelled(0)" [ref=e41] [cursor=pointer]:
+          - text: Cancelled
+          - generic [ref=e42]: (0)
+      - table [ref=e44]:
+        - rowgroup [ref=e45]:
+          - 'row "Order # Client Date Total Status Actions" [ref=e46]':
+            - columnheader [ref=e47]
+            - 'columnheader "Order #" [ref=e48]'
+            - columnheader "Client" [ref=e49]
+            - columnheader "Date" [ref=e50]
+            - columnheader "Total" [ref=e51]
+            - columnheader "Status" [ref=e52]
+            - columnheader "Actions" [ref=e53]
+        - rowgroup [ref=e54]:
+          - 'row "▶ #46 Admin(Cambridge TCG) 3/19/2026 £12.66 Ordered Stock verified: 3/19/2026 Mark Shipped Cancel" [ref=e55] [cursor=pointer]':
+            - cell "▶" [ref=e56]
+            - cell "#46" [ref=e57]
+            - cell "Admin(Cambridge TCG)" [ref=e58]:
+              - text: Admin
+              - generic [ref=e59]: (Cambridge TCG)
+            - cell "3/19/2026" [ref=e60]
+            - cell "£12.66" [ref=e61]
+            - 'cell "Ordered Stock verified: 3/19/2026" [ref=e62]':
+              - generic [ref=e63]: Ordered
+              - generic [ref=e64]: "Stock verified: 3/19/2026"
+            - cell "Mark Shipped Cancel" [ref=e65]:
+              - generic [ref=e66]:
+                - button "Mark Shipped" [ref=e67]
+                - button "Cancel" [ref=e68]
+          - 'row "▶ #45 Admin(Cambridge TCG) 3/19/2026 £12.66 Delivered Stock verified: 3/19/2026" [ref=e69] [cursor=pointer]':
+            - cell "▶" [ref=e70]
+            - cell "#45" [ref=e71]
+            - cell "Admin(Cambridge TCG)" [ref=e72]:
+              - text: Admin
+              - generic [ref=e73]: (Cambridge TCG)
+            - cell "3/19/2026" [ref=e74]
+            - cell "£12.66" [ref=e75]
+            - 'cell "Delivered Stock verified: 3/19/2026" [ref=e76]':
+              - generic [ref=e77]: Delivered
+              - generic [ref=e78]: "Stock verified: 3/19/2026"
+            - cell [ref=e79]
+          - 'row "▶ #44 Admin(Cambridge TCG) 3/19/2026 £12.66 Delivered Stock verified: 3/19/2026" [ref=e80] [cursor=pointer]':
+            - cell "▶" [ref=e81]
+            - cell "#44" [ref=e82]
+            - cell "Admin(Cambridge TCG)" [ref=e83]:
+              - text: Admin
+              - generic [ref=e84]: (Cambridge TCG)
+            - cell "3/19/2026" [ref=e85]
+            - cell "£12.66" [ref=e86]
+            - 'cell "Delivered Stock verified: 3/19/2026" [ref=e87]':
+              - generic [ref=e88]: Delivered
+              - generic [ref=e89]: "Stock verified: 3/19/2026"
+            - cell [ref=e90]
+          - 'row "▶ #43 Admin(Cambridge TCG) 3/19/2026 £12.66 Delivered Stock verified: 3/19/2026" [ref=e91] [cursor=pointer]':
+            - cell "▶" [ref=e92]
+            - cell "#43" [ref=e93]
+            - cell "Admin(Cambridge TCG)" [ref=e94]:
+              - text: Admin
+              - generic [ref=e95]: (Cambridge TCG)
+            - cell "3/19/2026" [ref=e96]
+            - cell "£12.66" [ref=e97]
+            - 'cell "Delivered Stock verified: 3/19/2026" [ref=e98]':
+              - generic [ref=e99]: Delivered
+              - generic [ref=e100]: "Stock verified: 3/19/2026"
+            - cell [ref=e101]
+          - 'row "▶ #42 Admin(Cambridge TCG) 3/9/2026 £12.66 Delivered Stock verified: 3/9/2026" [ref=e102] [cursor=pointer]':
+            - cell "▶" [ref=e103]
+            - cell "#42" [ref=e104]
+            - cell "Admin(Cambridge TCG)" [ref=e105]:
+              - text: Admin
+              - generic [ref=e106]: (Cambridge TCG)
+            - cell "3/9/2026" [ref=e107]
+            - cell "£12.66" [ref=e108]
+            - 'cell "Delivered Stock verified: 3/9/2026" [ref=e109]':
+              - generic [ref=e110]: Delivered
+              - generic [ref=e111]: "Stock verified: 3/9/2026"
+            - cell [ref=e112]
+          - 'row "▶ #41 Admin(Cambridge TCG) 3/9/2026 £12.66 Delivered Stock verified: 3/9/2026" [ref=e113] [cursor=pointer]':
+            - cell "▶" [ref=e114]
+            - cell "#41" [ref=e115]
+            - cell "Admin(Cambridge TCG)" [ref=e116]:
+              - text: Admin
+              - generic [ref=e117]: (Cambridge TCG)
+            - cell "3/9/2026" [ref=e118]
+            - cell "£12.66" [ref=e119]
+            - 'cell "Delivered Stock verified: 3/9/2026" [ref=e120]':
+              - generic [ref=e121]: Delivered
+              - generic [ref=e122]: "Stock verified: 3/9/2026"
+            - cell [ref=e123]
+          - 'row "▶ #40 Admin(Cambridge TCG) 3/9/2026 £12.66 Submitted Check Stock Cancel" [ref=e124] [cursor=pointer]':
+            - cell "▶" [ref=e125]
+            - cell "#40" [ref=e126]
+            - cell "Admin(Cambridge TCG)" [ref=e127]:
+              - text: Admin
+              - generic [ref=e128]: (Cambridge TCG)
+            - cell "3/9/2026" [ref=e129]
+            - cell "£12.66" [ref=e130]
+            - cell "Submitted" [ref=e131]:
+              - generic [ref=e132]: Submitted
+            - cell "Check Stock Cancel" [ref=e133]:
+              - generic [ref=e134]:
+                - link "Check Stock" [ref=e135]:
+                  - /url: /admin/orders/40/stock-check
+                - button "Cancel" [ref=e136]
+          - 'row "▶ #39 Admin(Cambridge TCG) 3/9/2026 £12.66 Submitted Check Stock Cancel" [ref=e137] [cursor=pointer]':
+            - cell "▶" [ref=e138]
+            - cell "#39" [ref=e139]
+            - cell "Admin(Cambridge TCG)" [ref=e140]:
+              - text: Admin
+              - generic [ref=e141]: (Cambridge TCG)
+            - cell "3/9/2026" [ref=e142]
+            - cell "£12.66" [ref=e143]
+            - cell "Submitted" [ref=e144]:
+              - generic [ref=e145]: Submitted
+            - cell "Check Stock Cancel" [ref=e146]:
+              - generic [ref=e147]:
+                - link "Check Stock" [ref=e148]:
+                  - /url: /admin/orders/39/stock-check
+                - button "Cancel" [ref=e149]
+          - 'row "▶ #38 Admin(Cambridge TCG) 3/6/2026 £12.66 Delivered Stock verified: 3/6/2026" [ref=e150] [cursor=pointer]':
+            - cell "▶" [ref=e151]
+            - cell "#38" [ref=e152]
+            - cell "Admin(Cambridge TCG)" [ref=e153]:
+              - text: Admin
+              - generic [ref=e154]: (Cambridge TCG)
+            - cell "3/6/2026" [ref=e155]
+            - cell "£12.66" [ref=e156]
+            - 'cell "Delivered Stock verified: 3/6/2026" [ref=e157]':
+              - generic [ref=e158]: Delivered
+              - generic [ref=e159]: "Stock verified: 3/6/2026"
+            - cell [ref=e160]
+          - 'row "▶ #37 Admin(Cambridge TCG) 3/6/2026 £12.66 Delivered Stock verified: 3/6/2026" [ref=e161] [cursor=pointer]':
+            - cell "▶" [ref=e162]
+            - cell "#37" [ref=e163]
+            - cell "Admin(Cambridge TCG)" [ref=e164]:
+              - text: Admin
+              - generic [ref=e165]: (Cambridge TCG)
+            - cell "3/6/2026" [ref=e166]
+            - cell "£12.66" [ref=e167]
+            - 'cell "Delivered Stock verified: 3/6/2026" [ref=e168]':
+              - generic [ref=e169]: Delivered
+              - generic [ref=e170]: "Stock verified: 3/6/2026"
+            - cell [ref=e171]
+          - 'row "▶ #36 Admin(Cambridge TCG) 3/6/2026 £12.66 Delivered Stock verified: 3/6/2026" [ref=e172] [cursor=pointer]':
+            - cell "▶" [ref=e173]
+            - cell "#36" [ref=e174]
+            - cell "Admin(Cambridge TCG)" [ref=e175]:
+              - text: Admin
+              - generic [ref=e176]: (Cambridge TCG)
+            - cell "3/6/2026" [ref=e177]
+            - cell "£12.66" [ref=e178]
+            - 'cell "Delivered Stock verified: 3/6/2026" [ref=e179]':
+              - generic [ref=e180]: Delivered
+              - generic [ref=e181]: "Stock verified: 3/6/2026"
+            - cell [ref=e182]
+          - 'row "▶ #35 Admin(Cambridge TCG) 3/6/2026 £12.66 Delivered Stock verified: 3/6/2026" [ref=e183] [cursor=pointer]':
+            - cell "▶" [ref=e184]
+            - cell "#35" [ref=e185]
+            - cell "Admin(Cambridge TCG)" [ref=e186]:
+              - text: Admin
+              - generic [ref=e187]: (Cambridge TCG)
+            - cell "3/6/2026" [ref=e188]
+            - cell "£12.66" [ref=e189]
+            - 'cell "Delivered Stock verified: 3/6/2026" [ref=e190]':
+              - generic [ref=e191]: Delivered
+              - generic [ref=e192]: "Stock verified: 3/6/2026"
+            - cell [ref=e193]
+          - 'row "▶ #34 Admin(Cambridge TCG) 3/6/2026 £12.66 Delivered Stock verified: 3/6/2026" [ref=e194] [cursor=pointer]':
+            - cell "▶" [ref=e195]
+            - cell "#34" [ref=e196]
+            - cell "Admin(Cambridge TCG)" [ref=e197]:
+              - text: Admin
+              - generic [ref=e198]: (Cambridge TCG)
+            - cell "3/6/2026" [ref=e199]
+            - cell "£12.66" [ref=e200]
+            - 'cell "Delivered Stock verified: 3/6/2026" [ref=e201]':
+              - generic [ref=e202]: Delivered
+              - generic [ref=e203]: "Stock verified: 3/6/2026"
+            - cell [ref=e204]
+          - 'row "▶ #33 Bigdriptarkov 3/3/2026 £8525.23 Delivered Stock verified: 3/4/2026" [ref=e205] [cursor=pointer]':
+            - cell "▶" [ref=e206]
+            - cell "#33" [ref=e207]
+            - cell "Bigdriptarkov" [ref=e208]
+            - cell "3/3/2026" [ref=e209]
+            - cell "£8525.23" [ref=e210]
+            - 'cell "Delivered Stock verified: 3/4/2026" [ref=e211]':
+              - generic [ref=e212]: Delivered
+              - generic [ref=e213]: "Stock verified: 3/4/2026"
+            - cell [ref=e214]
+          - 'row "▶ #32 Bigdriptarkov 3/2/2026 £1940.00 Delivered" [ref=e215] [cursor=pointer]':
+            - cell "▶" [ref=e216]
+            - cell "#32" [ref=e217]
+            - cell "Bigdriptarkov" [ref=e218]
+            - cell "3/2/2026" [ref=e219]
+            - cell "£1940.00" [ref=e220]
+            - cell "Delivered" [ref=e221]:
+              - generic [ref=e222]: Delivered
+            - cell [ref=e223]
+          - 'row "▶ #31 Bigdriptarkov 2/28/2026 £5002.20 Delivered Stock verified: 2/28/2026" [ref=e224] [cursor=pointer]':
+            - cell "▶" [ref=e225]
+            - cell "#31" [ref=e226]
+            - cell "Bigdriptarkov" [ref=e227]
+            - cell "2/28/2026" [ref=e228]
+            - cell "£5002.20" [ref=e229]
+            - 'cell "Delivered Stock verified: 2/28/2026" [ref=e230]':
+              - generic [ref=e231]: Delivered
+              - generic [ref=e232]: "Stock verified: 2/28/2026"
+            - cell [ref=e233]
+          - 'row "▶ #28 Bigdriptarkov 2/25/2026 £3700.00 Delivered" [ref=e234] [cursor=pointer]':
+            - cell "▶" [ref=e235]
+            - cell "#28" [ref=e236]
+            - cell "Bigdriptarkov" [ref=e237]
+            - cell "2/25/2026" [ref=e238]
+            - cell "£3700.00" [ref=e239]
+            - cell "Delivered" [ref=e240]:
+              - generic [ref=e241]: Delivered
+            - cell [ref=e242]
+          - 'row "▶ #27 Bigdriptarkov 2/21/2026 £520.00 Delivered" [ref=e243] [cursor=pointer]':
+            - cell "▶" [ref=e244]
+            - cell "#27" [ref=e245]
+            - cell "Bigdriptarkov" [ref=e246]
+            - cell "2/21/2026" [ref=e247]
+            - cell "£520.00" [ref=e248]
+            - cell "Delivered" [ref=e249]:
+              - generic [ref=e250]: Delivered
+            - cell [ref=e251]
+  - alert [ref=e252]
+```

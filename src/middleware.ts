@@ -10,7 +10,7 @@ import {
 const PUBLIC_PATHS = ["/login", "/api/auth"];
 
 /** Storefront-only page prefixes (blocked on admin domain). */
-const STOREFRONT_PAGE_PREFIXES = ["/catalog", "/orders", "/discount"];
+const STOREFRONT_PAGE_PREFIXES = ["/catalog", "/orders", "/margin", "/fulfillment"];
 
 /** Admin-only API prefixes (blocked on storefront domain). */
 const ADMIN_API_PREFIXES = [
