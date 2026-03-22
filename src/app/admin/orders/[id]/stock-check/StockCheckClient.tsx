@@ -66,6 +66,9 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
   const [checkingItem, setCheckingItem] = useState<number | null>(null);
   const [checkProgress, setCheckProgress] = useState({ done: 0, total: 0 });
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<"cardNumber" | "priceDiff" | "stock" | "lineTotal">("cardNumber");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   const checkedCount = items.filter((i) => i.stockStatus !== "pending").length;
   const allChecked = checkedCount === items.length;
@@ -75,7 +78,26 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
     return acc;
   }, {});
 
-  const filteredItems = statusFilter ? items.filter((i) => i.stockStatus === statusFilter) : items;
+  const toggleSort = (col: typeof sortBy) => {
+    if (sortBy === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortBy(col); setSortDir("asc"); }
+  };
+
+  const filteredItems = items
+    .filter((i) => !statusFilter || i.stockStatus === statusFilter)
+    .filter((i) => {
+      if (!search.trim()) return true;
+      const q = search.toLowerCase();
+      return i.cardNumber.toLowerCase().includes(q);
+    })
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortBy === "cardNumber") cmp = a.cardNumber.localeCompare(b.cardNumber);
+      else if (sortBy === "priceDiff") cmp = (a.priceDiffPct ?? 0) - (b.priceDiffPct ?? 0);
+      else if (sortBy === "stock") cmp = (a.checkedQuantity ?? 0) - (b.checkedQuantity ?? 0);
+      else if (sortBy === "lineTotal") cmp = a.lineTotal - b.lineTotal;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
 
   const updateItemStatus = useCallback(async (itemId: number, stockStatus: string, checkedPriceJpy?: number, checkedQuantity?: number) => {
     setSaving(itemId);
@@ -280,6 +302,34 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
             style={{ width: `${items.length > 0 ? (checkedCount / items.length) * 100 : 0}%` }}
           />
         </div>
+      </div>
+
+      {/* Search + Sort */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search card number..."
+          className="rounded bg-[#12121a] border border-[#1e1e2e] px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none w-48"
+        />
+        <span className="text-xs text-gray-500">Sort:</span>
+        {(["cardNumber", "priceDiff", "stock", "lineTotal"] as const).map((col) => (
+          <button
+            key={col}
+            onClick={() => toggleSort(col)}
+            className={`rounded px-2 py-1 text-xs transition ${sortBy === col ? "bg-brand-600 text-white" : "bg-gray-800/50 text-gray-400 hover:bg-gray-800"}`}
+          >
+            {col === "cardNumber" ? "Card #" : col === "priceDiff" ? "Δ Price" : col === "stock" ? "Stock" : "Total"}
+            {sortBy === col ? (sortDir === "asc" ? " ↑" : " ↓") : ""}
+          </button>
+        ))}
+        {(search || sortBy !== "cardNumber") && (
+          <button onClick={() => { setSearch(""); setSortBy("cardNumber"); setSortDir("asc"); }} className="text-xs text-gray-500 hover:text-gray-300">
+            Reset
+          </button>
+        )}
+        <span className="text-xs text-gray-500 ml-auto">{filteredItems.length}/{items.length}</span>
       </div>
 
       {/* Status filter */}
