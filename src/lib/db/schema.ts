@@ -103,6 +103,8 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   stockCheckedAt: timestamp("stock_checked_at"),
+  channel: text("channel").default("wholesale"),
+  externalOrderId: text("external_order_id"),
 }, (table) => ({
   clientIdIdx: index("orders_client_id_idx").on(table.clientId),
 }));
@@ -297,13 +299,24 @@ export const stockAdjustments = pgTable("stock_adjustments", {
     enum: ["count", "damage", "loss", "found", "correction", "other"],
   }).notNull().default("correction"),
   note: text("note"),
+  channel: text("channel").default("manual"),
   createdAt: timestamp("created_at").defaultNow(),
 }, (table) => ({
   cardIdx: index("stock_adjustments_card_idx").on(table.cardId),
 }));
+
+export const channelApiKeys = pgTable("channel_api_keys", {
+  id: serial("id").primaryKey(),
+  channel: text("channel").notNull(),
+  keyHash: text("key_hash").notNull(),
+  label: text("label"),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastUsedAt: timestamp("last_used_at"),
+});
 
 export type Purchase = typeof purchases.$inferSelect;
 export type PurchaseItem = typeof purchaseItems.$inferSelect;
 export type WantedCard = typeof wantedCards.$inferSelect;
 export type StockTarget = typeof stockTargets.$inferSelect;
 export type StockAdjustment = typeof stockAdjustments.$inferSelect;
+export type ChannelApiKey = typeof channelApiKeys.$inferSelect;
