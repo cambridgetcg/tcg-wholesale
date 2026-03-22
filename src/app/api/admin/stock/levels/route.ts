@@ -45,6 +45,7 @@ export async function GET(req: NextRequest) {
       cardNumber: cards.cardNumber,
       sku: cards.sku,
       name: cards.name,
+      nameEn: cards.nameEn,
       setCode: cards.setCode,
       imageUrl: cards.imageUrl,
       stock: cards.stock,

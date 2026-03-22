@@ -9,6 +9,7 @@ interface CardRow {
   cardNumber: string;
   sku: string;
   name: string;
+  nameEn: string | null;
   setCode: string | null;
   imageUrl: string | null;
   stock: number;
@@ -274,7 +275,7 @@ export default function AdminStockEditPage() {
                       {r.cardNumber}
                     </div>
                     <div className="text-xs text-gray-500 truncate max-w-[200px]">
-                      {r.name || "\u2014"}
+                      {r.nameEn || r.name || "\u2014"}
                     </div>
                   </td>
                   <td className="hidden md:table-cell px-3 py-3 text-gray-400">
