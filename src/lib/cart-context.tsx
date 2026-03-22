@@ -172,13 +172,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (!res.ok) return;
 
       const { prices } = await res.json() as { prices: Record<number, number> };
-      const changes: PriceChange[] = [];
+      // Collect changes inside setItems so we get the stable final snapshot.
+      // Using a ref avoids the race where React may call the updater multiple
+      // times in concurrent mode, causing duplicate entries in `changes`.
+      const detectedChanges = { current: [] as PriceChange[] };
 
       setItems((current) => {
+        const localChanges: PriceChange[] = [];
         const updated = current.map((item) => {
           const newPrice = prices[item.card.id];
           if (newPrice == null || newPrice === item.card.price) return item;
-          changes.push({
+          localChanges.push({
             cardId: item.card.id,
             cardNumber: item.card.cardNumber,
             oldPrice: item.card.price,
@@ -186,10 +190,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
           });
           return { ...item, card: { ...item.card, price: newPrice } };
         });
-        return changes.length > 0 ? updated : current;
+        detectedChanges.current = localChanges;
+        return localChanges.length > 0 ? updated : current;
       });
 
-      if (changes.length > 0) setPriceChanges(changes);
+      if (detectedChanges.current.length > 0) setPriceChanges(detectedChanges.current);
     } catch {
       // Silent — price refresh is best-effort
     } finally {
