@@ -36,16 +36,20 @@ _Created: 2026-03-22 | Priority: TOP_
 
 | Channel | Price Push | Stock Push | Sales Import | SKU | Images |
 |---------|-----------|-----------|--------------|-----|--------|
-| eBay | ✅ CSV export (manual) | ❌ | ❌ | ✅ same SKU | ❌ no |
+| eBay | ✅ Inventory API (real-time) | ✅ Inventory API | ✅ Fulfillment API | ✅ same SKU | ❌ no |
 | Cambridge TCG (Shopify) | Separate S3 pipeline | Separate | ❌ | ✅ | ✅ |
 | Wholesale B2B clients | ✅ live catalog | ✅ live | ✅ order system | ✅ | ✅ |
 | CardMarket | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-**Gaps:**
-1. eBay price push is manual CSV — not real-time, requires human action
-2. Cambridge TCG has its own S3 pricing pipeline — diverges from wholesale
-3. No channel pulls sales back to reduce stock
-4. Images not centrally managed or pushed to eBay
+**Phase 1 DONE (2026-03-22):** eBay real-time Inventory + Fulfillment API client
+**Phase 2 DONE (2026-03-22):** GET /api/v1/prices endpoint with Bearer auth
+**Phase 4 DONE (2026-03-22):** channel field on orders/stock_adjustments, channel_api_keys table
+
+**Remaining:**
+1. Cambridge TCG: update buylist to consume /api/v1/prices instead of local files
+2. Phase 3: image URL in price API, eBay listings use DB image URLs
+3. Phase 5: CardMarket (Q3 2026)
+4. Wire eBay order import → stock decrements (sales→stock_adjustments with channel="ebay")
 
 ---
 
