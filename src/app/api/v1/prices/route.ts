@@ -35,6 +35,7 @@ async function authenticateApiKey(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  try {
   const apiKey = await authenticateApiKey(req);
   if (!apiKey) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -99,4 +100,9 @@ export async function GET(req: NextRequest) {
       updated_at: r.updatedAt,
     })),
   });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[/api/v1/prices] Error:", message);
+    return NextResponse.json({ error: "Internal error", detail: message }, { status: 500 });
+  }
 }
