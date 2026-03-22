@@ -7,7 +7,8 @@ import {
 } from "@/lib/subdomain";
 
 /** Paths that never require authentication. */
-const PUBLIC_PATHS = ["/login", "/api/auth"];
+// /api/v1/ uses its own Bearer token auth (channel_api_keys table)
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/v1"];
 
 /** Storefront-only page prefixes (blocked on admin domain). */
 const STOREFRONT_PAGE_PREFIXES = ["/catalog", "/orders", "/margin", "/fulfillment"];
