@@ -129,6 +129,7 @@ export async function sendOrderEmail(
       }
 
       default:
+        console.warn(`[EMAIL] Unknown notification type "${type}" for order #${orderId} — skipping`);
         return;
     }
 
