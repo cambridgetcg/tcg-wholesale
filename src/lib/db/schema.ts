@@ -63,6 +63,7 @@ export const cards = pgTable("cards", {
   cardNumber: text("card_number").notNull(),
   sku: text("sku").notNull().unique(),
   name: text("name").default(""),
+  nameEn: text("name_en"),
   setCode: text("set_code"),
   setName: text("set_name"),
   cardrushUrl: text("cardrush_url"),
@@ -288,7 +289,21 @@ export const stockTargets = pgTable("stock_targets", {
   targetQty: integer("target_qty").notNull(),
 });
 
+export const stockAdjustments = pgTable("stock_adjustments", {
+  id: serial("id").primaryKey(),
+  cardId: integer("card_id").notNull().references(() => cards.id),
+  delta: integer("delta").notNull(),
+  reason: text("reason", {
+    enum: ["count", "damage", "loss", "found", "correction", "other"],
+  }).notNull().default("correction"),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  cardIdx: index("stock_adjustments_card_idx").on(table.cardId),
+}));
+
 export type Purchase = typeof purchases.$inferSelect;
 export type PurchaseItem = typeof purchaseItems.$inferSelect;
 export type WantedCard = typeof wantedCards.$inferSelect;
 export type StockTarget = typeof stockTargets.$inferSelect;
+export type StockAdjustment = typeof stockAdjustments.$inferSelect;

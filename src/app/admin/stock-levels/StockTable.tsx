@@ -8,11 +8,21 @@ interface CardRow {
   cardNumber: string;
   sku: string;
   name: string | null;
+  nameEn: string | null;
   setCode: string | null;
   imageUrl: string | null;
   stock: number;
   pendingStock: number;
 }
+
+const REASONS = [
+  { value: "count", label: "Stock count" },
+  { value: "damage", label: "Damaged" },
+  { value: "loss", label: "Lost" },
+  { value: "found", label: "Found" },
+  { value: "correction", label: "Correction" },
+  { value: "other", label: "Other" },
+] as const;
 
 export default function StockTable({
   cards: initialCards,
@@ -28,6 +38,8 @@ export default function StockTable({
   const [cards, setCards] = useState(initialCards);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [editReason, setEditReason] = useState<string>("correction");
+  const [editNote, setEditNote] = useState("");
   const [saving, setSaving] = useState<number | null>(null);
   const [lightbox, setLightbox] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -50,26 +62,30 @@ export default function StockTable({
   const sortIndicator = (field: string) =>
     currentSort === field ? (currentOrder === "asc" ? " \u25B2" : " \u25BC") : "";
 
-  const saveStock = useCallback(async (cardId: number, stock: number) => {
+  const saveStock = useCallback(async (cardId: number, stock: number, reason: string, note: string) => {
     setSaving(cardId);
     await fetch("/api/admin/stock/adjust", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cardId, stock }),
+      body: JSON.stringify({ cardId, stock, reason, note: note || undefined }),
     });
     setCards((prev) => prev.map((c) => (c.id === cardId ? { ...c, stock } : c)));
     setSaving(null);
     setEditingId(null);
+    setEditReason("correction");
+    setEditNote("");
   }, []);
 
   const commitEdit = useCallback((card: CardRow) => {
     const val = parseInt(editValue);
     if (!isNaN(val) && val >= 0 && val !== card.stock) {
-      saveStock(card.id, val);
+      saveStock(card.id, val, editReason, editNote);
     } else {
       setEditingId(null);
+      setEditReason("correction");
+      setEditNote("");
     }
-  }, [editValue, saveStock]);
+  }, [editValue, editReason, editNote, saveStock]);
 
   function handleKeyDown(e: React.KeyboardEvent, card: CardRow) {
     if (e.key === "Enter") {
@@ -77,17 +93,21 @@ export default function StockTable({
       commitEdit(card);
     } else if (e.key === "Escape") {
       setEditingId(null);
+      setEditReason("correction");
+      setEditNote("");
     }
   }
 
   function startEdit(card: CardRow) {
     setEditingId(card.id);
     setEditValue(String(card.stock));
+    setEditReason("correction");
+    setEditNote("");
   }
 
   function increment(card: CardRow, delta: number) {
     const newVal = Math.max(0, card.stock + delta);
-    saveStock(card.id, newVal);
+    saveStock(card.id, newVal, "correction", "");
   }
 
   if (cards.length === 0) {
@@ -144,22 +164,53 @@ export default function StockTable({
               </td>
               <td className="px-2 md:px-4 py-3">
                 <div className="font-mono text-brand-500">{card.cardNumber}</div>
-                <div className="text-xs text-gray-500 truncate max-w-[200px]">{card.name || "\u2014"}</div>
+                <div className="text-xs text-gray-500 truncate max-w-[200px]">{card.nameEn || card.name || "\u2014"}</div>
               </td>
               <td className="hidden md:table-cell px-4 py-3 text-gray-400 font-mono text-xs">{card.sku}</td>
               <td className="hidden md:table-cell px-4 py-3 text-gray-400">{card.setCode || "\u2014"}</td>
               <td className="px-2 md:px-4 py-3 text-center">
                 {editingId === card.id ? (
-                  <input
-                    ref={inputRef}
-                    type="number"
-                    min={0}
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onKeyDown={(e) => handleKeyDown(e, card)}
-                    onBlur={() => commitEdit(card)}
-                    className="w-16 rounded border border-brand-500 bg-[#0a0a0f] px-2 py-1 text-center text-sm focus:outline-none"
-                  />
+                  <div className="flex flex-col items-center gap-1">
+                    <input
+                      ref={inputRef}
+                      type="number"
+                      min={0}
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, card)}
+                      className="w-16 rounded border border-brand-500 bg-[#0a0a0f] px-2 py-1 text-center text-sm focus:outline-none"
+                    />
+                    <select
+                      value={editReason}
+                      onChange={(e) => setEditReason(e.target.value)}
+                      className="w-32 rounded border border-[#2e2e3e] bg-[#0a0a0f] px-1 py-0.5 text-xs text-gray-300 focus:outline-none"
+                    >
+                      {REASONS.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                    <input
+                      value={editNote}
+                      onChange={(e) => setEditNote(e.target.value)}
+                      onKeyDown={(e) => handleKeyDown(e, card)}
+                      placeholder="Note (optional)"
+                      className="w-32 rounded border border-[#2e2e3e] bg-[#0a0a0f] px-1 py-0.5 text-xs text-gray-300 focus:outline-none placeholder:text-gray-600"
+                    />
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => commitEdit(card)}
+                        className="rounded bg-brand-600 px-2 py-0.5 text-xs font-medium hover:bg-brand-700 transition"
+                      >
+                        Save
+                      </button>
+                      <button
+                        onClick={() => { setEditingId(null); setEditReason("correction"); setEditNote(""); }}
+                        className="rounded bg-[#1e1e2e] px-2 py-0.5 text-xs text-gray-400 hover:text-gray-200 transition"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 ) : (
                   <button
                     onClick={() => startEdit(card)}

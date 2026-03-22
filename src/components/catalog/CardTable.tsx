@@ -12,6 +12,7 @@ interface CardRow {
   cardNumber: string;
   sku: string;
   name: string | null;
+  nameEn: string | null;
   setCode: string | null;
   setName: string | null;
   price: number | null;
@@ -169,6 +170,9 @@ export default function CardTable({
                 </td>
                 <td className="px-2 md:px-4 py-3 font-mono text-brand-500">
                   {currentCategory === "sealed" ? (card.name || card.cardNumber) : card.cardNumber}
+                  {card.nameEn && (
+                    <div className="text-xs text-gray-400 font-sans">{card.nameEn}</div>
+                  )}
                 </td>
                 <td className="hidden md:table-cell px-4 py-3 text-gray-400 font-mono text-xs">
                   {card.sku}

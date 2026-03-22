@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { cards, games, sets as setsTable } from "@/lib/db/schema";
-import { ilike, or, eq, asc, desc, count, sql, SQL, gt, getTableColumns } from "drizzle-orm";
+import { ilike, or, eq, asc, desc, count, sql, SQL, gt, gte, lte, and, getTableColumns } from "drizzle-orm";
 import StockTable from "./StockTable";
 
 const PER_PAGE = 50;
@@ -21,6 +21,7 @@ export default async function StockLevelsPage({
     order?: string;
     page?: string;
     stocked?: string;
+    ebay?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -31,6 +32,7 @@ export default async function StockLevelsPage({
   const sortOrder = params.order === "desc" ? "desc" : "asc";
   const page = Math.max(1, parseInt(params.page || "1", 10) || 1);
   const stockedOnly = params.stocked === "1";
+  const ebayOnly = params.ebay === "1";
 
   const allGames = await db.select().from(games).orderBy(asc(games.sortOrder));
 
@@ -55,6 +57,9 @@ export default async function StockLevelsPage({
   }
   if (stockedOnly) {
     conditions.push(or(gt(cards.stock, 0), gt(cards.pendingStock, 0))!);
+  }
+  if (ebayOnly) {
+    conditions.push(and(gt(cards.stock, 0), gte(cards.price, 3), lte(cards.price, 30))!);
   }
   // Only singles
   conditions.push(eq(cards.category, "singles"));
@@ -133,6 +138,7 @@ export default async function StockLevelsPage({
             currentSort={sortField}
             currentOrder={sortOrder}
             stockedOnly={stockedOnly}
+            ebayOnly={ebayOnly}
           />
         </Suspense>
       </div>

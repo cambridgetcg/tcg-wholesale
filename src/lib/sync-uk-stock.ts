@@ -4,8 +4,12 @@ import { sql } from "drizzle-orm";
 /**
  * Sync UK warehouse stock into cards.stock and cards.pending_stock.
  *
- * stock         = received purchase qty - fulfilled qty  (on-hand in UK)
- * pending_stock = ordered/shipped purchase qty           (in transit)
+ * stock         = received purchase qty - fulfilled qty + stock adjustments
+ * pending_stock = ordered/shipped purchase qty
+ *
+ * Stock adjustments (from manual counts, damage, etc.) are persisted in
+ * stock_adjustments and layered on top of purchase-derived stock so they
+ * survive re-sync operations.
  */
 export async function syncUkStock(cardIds?: number[]) {
   const scope = cardIds?.length ? sql`AND c.id = ANY(${cardIds})` : sql``;
@@ -47,6 +51,19 @@ export async function syncUkStock(cardIds?: number[]) {
       WHERE pu.status = 'received' AND pi.condition NOT LIKE '状態%'
     )
     ${scopeNoAlias}
+  `);
+
+  // Layer stock adjustments (manual counts, damage, etc.) on top of
+  // purchase-derived stock so they persist across re-syncs
+  await db.execute(sql`
+    UPDATE cards c
+    SET stock = GREATEST(c.stock + adj.total_delta, 0)
+    FROM (
+      SELECT card_id, SUM(delta)::int AS total_delta
+      FROM stock_adjustments
+      GROUP BY card_id
+    ) adj
+    WHERE c.id = adj.card_id ${scope}
   `);
 
   // Pending stock: ordered or shipped Mint only (exclude A- condition)

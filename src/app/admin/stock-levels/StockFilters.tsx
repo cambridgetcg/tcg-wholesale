@@ -10,6 +10,7 @@ export default function StockFilters({
   currentSort,
   currentOrder,
   stockedOnly,
+  ebayOnly,
 }: {
   sets: { code: string; name: string }[];
   currentQuery: string;
@@ -17,6 +18,7 @@ export default function StockFilters({
   currentSort: string;
   currentOrder: string;
   stockedOnly: boolean;
+  ebayOnly: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -92,6 +94,15 @@ export default function StockFilters({
           className="accent-brand-500"
         />
         In stock only
+      </label>
+      <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={ebayOnly}
+          onChange={(e) => pushParams({ ebay: e.target.checked ? "1" : "" })}
+          className="accent-brand-500"
+        />
+        eBay eligible (£3–£30)
       </label>
     </>
   );
