@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { cards, games, channelApiKeys } from "@/lib/db/schema";
 import { eq, gte, and, sql } from "drizzle-orm";
-import bcrypt from "bcryptjs";
+import { createHash } from "crypto";
+
+function hashKey(raw: string): string {
+  return createHash("sha256").update(raw).digest("hex");
+}
 
 async function authenticateApiKey(req: NextRequest) {
   const authHeader = req.headers.get("authorization");
@@ -11,19 +15,23 @@ async function authenticateApiKey(req: NextRequest) {
   const rawKey = authHeader.slice(7);
   if (!rawKey) return null;
 
-  const allKeys = await db.select().from(channelApiKeys);
-  for (const row of allKeys) {
-    if (await bcrypt.compare(rawKey, row.keyHash)) {
-      // Update lastUsedAt (fire-and-forget)
-      db.update(channelApiKeys)
-        .set({ lastUsedAt: new Date() })
-        .where(eq(channelApiKeys.id, row.id))
-        .execute()
-        .catch(() => {});
-      return row;
-    }
-  }
-  return null;
+  const keyHash = hashKey(rawKey);
+  const [row] = await db
+    .select()
+    .from(channelApiKeys)
+    .where(eq(channelApiKeys.keyHash, keyHash))
+    .limit(1);
+
+  if (!row) return null;
+
+  // Update lastUsedAt (fire-and-forget)
+  db.update(channelApiKeys)
+    .set({ lastUsedAt: new Date() })
+    .where(eq(channelApiKeys.id, row.id))
+    .execute()
+    .catch(() => {});
+
+  return row;
 }
 
 export async function GET(req: NextRequest) {
