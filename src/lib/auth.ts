@@ -5,6 +5,37 @@ import { db } from "./db";
 import { clients } from "./db/schema";
 import { eq } from "drizzle-orm";
 
+// Simple in-memory brute-force guard: 5 failed attempts per email per 15 minutes.
+// Not persistent across restarts — good enough for a low-traffic B2B site.
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+function checkLoginRateLimit(email: string): boolean {
+  const now = Date.now();
+  const record = loginAttempts.get(email);
+  if (!record || now > record.resetAt) {
+    loginAttempts.set(email, { count: 0, resetAt: now + WINDOW_MS });
+    return true; // allowed
+  }
+  if (record.count >= MAX_ATTEMPTS) return false; // blocked
+  return true;
+}
+
+function recordLoginFailure(email: string): void {
+  const now = Date.now();
+  const record = loginAttempts.get(email);
+  if (!record || now > record.resetAt) {
+    loginAttempts.set(email, { count: 1, resetAt: now + WINDOW_MS });
+  } else {
+    record.count += 1;
+  }
+}
+
+function clearLoginFailures(email: string): void {
+  loginAttempts.delete(email);
+}
+
 const isProd = process.env.NODE_ENV === "production";
 const cookieDomain = isProd ? ".wholesaletcgdirect.com" : undefined;
 
@@ -52,15 +83,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const password = credentials?.password as string;
         if (!email || !password) return null;
 
+        // Rate limit check
+        if (!checkLoginRateLimit(email)) {
+          console.warn(`[AUTH] Login blocked for ${email} — too many failed attempts`);
+          return null;
+        }
+
         const [user] = await db
           .select()
           .from(clients)
           .where(eq(clients.email, email))
           .limit(1);
 
-        if (!user) return null;
-        if (!compareSync(password, user.passwordHash)) return null;
+        if (!user || !compareSync(password, user.passwordHash)) {
+          recordLoginFailure(email);
+          return null;
+        }
 
+        clearLoginFailures(email);
         return {
           id: String(user.id),
           email: user.email,
