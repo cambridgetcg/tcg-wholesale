@@ -72,6 +72,7 @@ export async function POST(req: NextRequest) {
             delta,
             reason: "count",
             note: `eBay sale: ${order.ebayOrderId}`,
+            channel: "ebay-sale",
           });
 
           await tx
