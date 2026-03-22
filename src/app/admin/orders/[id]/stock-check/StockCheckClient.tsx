@@ -88,7 +88,7 @@ export default function StockCheckClient({ orderId, clientName, clientCompany, o
     .filter((i) => {
       if (!search.trim()) return true;
       const q = search.toLowerCase();
-      return i.cardNumber.toLowerCase().includes(q);
+      return i.cardNumber.toLowerCase().startsWith(q);
     })
     .sort((a, b) => {
       let cmp = 0;

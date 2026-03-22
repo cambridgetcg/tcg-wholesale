@@ -4,6 +4,7 @@ import { orders, orderItems, cards, clients, orderStatusHistory, cartItems } fro
 import { eq, and } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { sendOrderEmail } from "@/lib/email/send-order-email";
+import { assignClientOrderNumber } from "@/lib/order-number";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -89,6 +90,9 @@ export async function POST(req: NextRequest) {
     for (const item of resolvedItems) {
       await tx.insert(orderItems).values({ orderId: newOrder.id, ...item });
     }
+
+    // Assign per-client order number (e.g. "CTCG-007")
+    await assignClientOrderNumber(tx, clientId, newOrder.id);
 
     // Record initial status in audit log
     try {

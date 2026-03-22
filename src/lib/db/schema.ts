@@ -33,6 +33,8 @@ export const clients = pgTable("clients", {
   currentMonthSpend: money("current_month_spend").notNull().default(0),
   priorMonthSpend: money("prior_month_spend").notNull().default(0),
   volumeDiscountPct: real("volume_discount_pct").notNull().default(0),
+  orderPrefix: text("order_prefix"),
+  orderSequence: integer("order_sequence").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -102,6 +104,7 @@ export const orders = pgTable("orders", {
   quotedExpiresAt: timestamp("quoted_expires_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
+  clientOrderNumber: text("client_order_number"),
   stockCheckedAt: timestamp("stock_checked_at"),
   channel: text("channel").default("wholesale"),
   externalOrderId: text("external_order_id"),

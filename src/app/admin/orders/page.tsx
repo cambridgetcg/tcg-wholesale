@@ -15,6 +15,7 @@ interface Order {
   notes: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+  clientOrderNumber: string | null;
   stockCheckedAt: string | null;
 }
 
@@ -243,7 +244,12 @@ export default function AdminOrdersPage() {
               <Fragment key={order.id}>
                 <tr className="hover:bg-[#12121a] cursor-pointer" onClick={() => toggleExpand(order.id)}>
                   <td className="px-2 md:px-4 py-3 text-gray-500">{expandedId === order.id ? "\u25BC" : "\u25B6"}</td>
-                  <td className="px-2 md:px-4 py-3 font-medium">#{order.id}</td>
+                  <td className="px-2 md:px-4 py-3 font-medium">
+                    #{order.id}
+                    {order.clientOrderNumber && (
+                      <span className="ml-2 text-xs text-gray-400 font-normal">{order.clientOrderNumber}</span>
+                    )}
+                  </td>
                   <td className="hidden md:table-cell px-4 py-3">
                     <span>{order.clientName ?? `Client #${order.clientId}`}</span>
                     {order.clientCompany && <span className="ml-1 text-gray-500 text-xs">({order.clientCompany})</span>}
