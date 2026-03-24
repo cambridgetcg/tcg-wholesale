@@ -257,8 +257,9 @@ export class ShopifyClient {
       throw new Error("No active Shopify locations found");
     }
 
-    // Use first active location (primary)
-    this._locationId = String(active[0].id);
+    // Use "Shop location" if present, otherwise first active location
+    const shop = active.find((l) => l.name === "Shop location") ?? active[0];
+    this._locationId = String(shop.id);
     return this._locationId;
   }
 }
