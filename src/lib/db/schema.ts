@@ -83,6 +83,10 @@ export const cards = pgTable("cards", {
   imageUrl: text("image_url"),
   stock: integer("stock").notNull().default(0), // UK warehouse on-hand: received - fulfilled
   pendingStock: integer("pending_stock").notNull().default(0), // ordered/shipped but not yet received
+  shopifyProductId: text("shopify_product_id"),
+  shopifyVariantId: text("shopify_variant_id"),
+  shopifyInventoryItemId: text("shopify_inventory_item_id"),
+  shopifySyncedAt: timestamp("shopify_synced_at"),
 }, (table) => ({
   nameIdx: index("cards_name_idx").on(table.name),
   cardNumberIdx: index("cards_card_number_idx").on(table.cardNumber),
