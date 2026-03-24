@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { cards, games, sets, priceHistory } from "@/lib/db/schema";
+import { cards, games, sets, priceHistory, priceArchive } from "@/lib/db/schema";
 import { fetchPriceFeed, parseSkuGame } from "@/lib/s3";
 import { calculatePrice } from "@/lib/pricing";
-import { eq } from "drizzle-orm";
+import { eq, and, count } from "drizzle-orm";
 
 export async function POST() {
   const session = await auth();
@@ -104,7 +104,32 @@ export async function POST() {
       synced++;
     }
 
-    return NextResponse.json({ synced, timestamp: now });
+    // ── Post-sync: ensure price_archive is up-to-date for One Piece ──────
+    // Only run if today's snapshot hasn't already been written for this game.
+    let snapshotResult = null;
+    try {
+      const [existing] = await db
+        .select({ cnt: count() })
+        .from(priceArchive)
+        .where(
+          and(
+            eq(priceArchive.snapshotDate, today),
+          ),
+        );
+
+      if (!existing || Number(existing.cnt) === 0) {
+        const { runDailySnapshot } = await import("@/lib/price-snapshot");
+        snapshotResult = await runDailySnapshot({ gameIds: [game!.id] });
+      } else {
+        snapshotResult = { skipped: true, reason: "already run today" };
+      }
+    } catch (snapErr) {
+      // Non-fatal: sync succeeded, snapshot can be retried by cron
+      console.error("[sync] price-snapshot post-sync failed:", snapErr);
+      snapshotResult = { error: String(snapErr) };
+    }
+
+    return NextResponse.json({ synced, timestamp: now, snapshot: snapshotResult });
   } catch (error) {
     return NextResponse.json(
       { error: "Sync failed", details: String(error) },
