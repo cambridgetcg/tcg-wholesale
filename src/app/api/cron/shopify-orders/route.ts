@@ -1,21 +1,52 @@
 /**
  * POST /api/cron/shopify-orders
  *
- * Pull recent Shopify orders and decrement stock for any not yet processed.
+ * Pull recent Shopify orders, create wholesale order records, and decrement stock.
  * Auth: Authorization: Bearer {CRON_SECRET}  OR  Vercel Cron header
  *
  * Query params:
  *   ?order_numbers=1186,1185  — process specific orders only
  *   ?since=2026-03-20         — orders since this date (default: 7 days)
  *
- * Deduplication: checks stock_adjustments.note for "shopify-#NNNN"
+ * Deduplication: checks orders.externalOrderId for Shopify order ID
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { cards, stockAdjustments } from "@/lib/db/schema";
+import { cards, clients, orders as ordersTable, orderItems, stockAdjustments } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { ShopifyClient } from "@/lib/shopify-client";
+import { hash } from "bcryptjs";
+import { randomUUID } from "crypto";
+
+/**
+ * Ensure a "Shopify Cambridge" client exists in the DB.
+ * Returns the client ID. Creates the client on first use.
+ */
+async function getOrCreateShopifyClient(): Promise<number> {
+  const email = "shopify@cambridgetcg.com";
+
+  const [existing] = await db
+    .select({ id: clients.id })
+    .from(clients)
+    .where(eq(clients.email, email))
+    .limit(1);
+
+  if (existing) return existing.id;
+
+  const passwordHash = await hash(randomUUID(), 10);
+  const [created] = await db
+    .insert(clients)
+    .values({
+      name: "Shopify Cambridge",
+      email,
+      passwordHash,
+      role: "client",
+    })
+    .returning({ id: clients.id });
+
+  return created.id;
+}
 
 function authorizeCron(req: NextRequest): boolean {
   // Vercel Cron sends this header automatically
@@ -71,37 +102,57 @@ export async function POST(req: NextRequest) {
     ? processable.filter((o) => targetNumbers.includes(o.order_number))
     : processable;
 
+  // Ensure the Shopify Cambridge client exists for order records
+  const shopifyClientId = await getOrCreateShopifyClient();
+
   const allResults: Array<{
     order_number: number;
     status: string;
     items_processed: number;
     items_skipped: number;
     items_errored: number;
+    order_id?: number;
     details?: Array<{ sku: string; prev: number; new: number; delta: number }>;
     errors?: Array<{ sku: string; error: string }>;
   }> = [];
 
   for (const order of targetOrders) {
+    const externalId = String(order.id);
     const orderRef = `shopify-#${order.order_number}`;
 
-    // Check if already processed
-    const existing = await db
-      .select({ id: stockAdjustments.id })
-      .from(stockAdjustments)
-      .where(eq(stockAdjustments.note, orderRef))
+    // Dedup: check if we already created an order for this Shopify order
+    const [existingOrder] = await db
+      .select({ id: ordersTable.id })
+      .from(ordersTable)
+      .where(eq(ordersTable.externalOrderId, externalId))
       .limit(1);
 
-    if (existing.length > 0) {
+    if (existingOrder) {
       allResults.push({
         order_number: order.order_number,
         status: "already_processed",
         items_processed: 0,
         items_skipped: order.line_items.length,
         items_errored: 0,
+        order_id: existingOrder.id,
       });
       continue;
     }
 
+    // Create the wholesale order record
+    const [newOrder] = await db
+      .insert(ordersTable)
+      .values({
+        clientId: shopifyClientId,
+        status: "paid",
+        total: parseFloat(order.total_price),
+        channel: "shopify-cambridge",
+        externalOrderId: externalId,
+        clientOrderNumber: `#${order.order_number}`,
+      })
+      .returning({ id: ordersTable.id });
+
+    // Create order_items for line items that have matching cards
     const details: Array<{ sku: string; prev: number; new: number; delta: number }> = [];
     const errors: Array<{ sku: string; error: string }> = [];
 
@@ -124,6 +175,17 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
+        // Create the order item
+        await db.insert(orderItems).values({
+          orderId: newOrder.id,
+          cardId: card.id,
+          quantity: item.quantity,
+          unitPrice: parseFloat(item.price),
+          lineTotal: parseFloat(item.price) * item.quantity,
+          stockStatus: "in_stock",
+        });
+
+        // Decrement stock
         const prevStock = card.stock;
         const delta = -Math.min(item.quantity, prevStock);
         const newStock = prevStock + delta;
@@ -153,6 +215,7 @@ export async function POST(req: NextRequest) {
       items_processed: details.length,
       items_skipped: 0,
       items_errored: errors.length,
+      order_id: newOrder.id,
       details,
       ...(errors.length > 0 && { errors }),
     });

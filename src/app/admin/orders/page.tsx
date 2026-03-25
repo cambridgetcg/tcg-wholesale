@@ -17,6 +17,7 @@ interface Order {
   updatedAt: string | null;
   clientOrderNumber: string | null;
   stockCheckedAt: string | null;
+  channel: string | null;
 }
 
 interface OrderItemRow {
@@ -245,6 +246,9 @@ export default function AdminOrdersPage() {
                 <tr className="hover:bg-[#12121a] cursor-pointer" onClick={() => toggleExpand(order.id)}>
                   <td className="px-2 md:px-4 py-3 text-gray-500">{expandedId === order.id ? "\u25BC" : "\u25B6"}</td>
                   <td className="px-2 md:px-4 py-3 font-medium">
+                    {order.channel === "shopify-cambridge" && (
+                      <span className="mr-1" title="Shopify order">🛒</span>
+                    )}
                     #{order.id}
                     {order.clientOrderNumber && (
                       <span className="ml-2 text-xs text-gray-400 font-normal">{order.clientOrderNumber}</span>

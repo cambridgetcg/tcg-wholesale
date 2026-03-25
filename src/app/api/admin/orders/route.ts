@@ -22,6 +22,7 @@ export async function GET() {
       notes: orders.notes,
       clientOrderNumber: orders.clientOrderNumber,
       stockCheckedAt: orders.stockCheckedAt,
+      channel: orders.channel,
       createdAt: orders.createdAt,
       updatedAt: orders.updatedAt,
     })
