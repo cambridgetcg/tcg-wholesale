@@ -1,6 +1,9 @@
 /**
  * Shopify REST API client for product/inventory management.
  *
+ * Auth: OAuth client_credentials grant (tokens expire every 24h).
+ * Falls back to static SHOPIFY_ACCESS_TOKEN if client ID/secret not set.
+ *
  * Rate limit: 2 req/s (Shopify standard plan: burst 40, steady 2/s).
  * We enforce 500ms between requests.
  */
@@ -26,22 +29,110 @@ export interface CardForShopify {
   stock: number;
 }
 
+export interface ShopifyOrder {
+  id: number;
+  order_number: number;
+  created_at: string;
+  financial_status: string;
+  fulfillment_status: string | null;
+  total_price: string;
+  currency: string;
+  line_items: Array<{
+    id: number;
+    title: string;
+    sku: string;
+    quantity: number;
+    price: string;
+    variant_id: number;
+    product_id: number;
+  }>;
+  customer?: {
+    id: number;
+    email: string;
+    first_name: string;
+    last_name: string;
+  };
+}
+
 /** Minimum delay between API requests (ms) */
 const REQUEST_DELAY_MS = 500;
+
+/** Buffer before expiry to trigger refresh (5 minutes) */
+const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 export class ShopifyClient {
   private store: string;
   private accessToken: string;
+  private clientId: string;
+  private clientSecret: string;
+  private tokenExpiresAt: number = 0;
   private baseUrl: string;
 
-  constructor(store?: string, accessToken?: string) {
-    this.store = store ?? process.env.SHOPIFY_STORE ?? "";
-    this.accessToken = accessToken ?? process.env.SHOPIFY_ACCESS_TOKEN ?? "";
+  constructor(opts?: {
+    store?: string;
+    accessToken?: string;
+    clientId?: string;
+    clientSecret?: string;
+  }) {
+    this.store = opts?.store ?? process.env.SHOPIFY_STORE ?? "";
+    this.accessToken = opts?.accessToken ?? process.env.SHOPIFY_ACCESS_TOKEN ?? "";
+    this.clientId = opts?.clientId ?? process.env.SHOPIFY_CLIENT_ID ?? "";
+    this.clientSecret = opts?.clientSecret ?? process.env.SHOPIFY_CLIENT_SECRET ?? "";
 
     if (!this.store) throw new Error("SHOPIFY_STORE is required");
-    if (!this.accessToken) throw new Error("SHOPIFY_ACCESS_TOKEN is required");
+
+    // If we have client credentials, we can fetch tokens on demand
+    // If we only have a static access token, use that
+    if (!this.clientId && !this.accessToken) {
+      throw new Error("Either SHOPIFY_CLIENT_ID+SECRET or SHOPIFY_ACCESS_TOKEN is required");
+    }
 
     this.baseUrl = `https://${this.store}/admin/api/${SHOPIFY_API_VERSION}`;
+  }
+
+  /**
+   * Get a valid access token, refreshing via client_credentials if needed.
+   */
+  private async getAccessToken(): Promise<string> {
+    // If using static token (no client credentials), return as-is
+    if (!this.clientId || !this.clientSecret) {
+      return this.accessToken;
+    }
+
+    // Check if token is still valid (with buffer)
+    if (this.accessToken && Date.now() < this.tokenExpiresAt - TOKEN_REFRESH_BUFFER_MS) {
+      return this.accessToken;
+    }
+
+    // Fetch new token via client_credentials grant
+    const res = await fetch(
+      `https://${this.store}/admin/oauth/access_token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+          grant_type: "client_credentials",
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Shopify OAuth token exchange failed: ${res.status} ${text}`);
+    }
+
+    const data = (await res.json()) as {
+      access_token: string;
+      expires_in: number;
+      scope: string;
+    };
+
+    this.accessToken = data.access_token;
+    this.tokenExpiresAt = Date.now() + data.expires_in * 1000;
+
+    return this.accessToken;
   }
 
   // ── Internal helpers ─────────────────────────────────────────────────────
@@ -51,11 +142,12 @@ export class ShopifyClient {
     path: string,
     body?: unknown
   ): Promise<{ data: T; headers: Headers }> {
+    const token = await this.getAccessToken();
     const url = `${this.baseUrl}/${path}`;
     const res = await fetch(url, {
       method,
       headers: {
-        "X-Shopify-Access-Token": this.accessToken,
+        "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
@@ -89,9 +181,10 @@ export class ShopifyClient {
       `${this.baseUrl}/products.json?limit=250&fields=id,variants`;
 
     while (nextUrl) {
+      const token = await this.getAccessToken();
       const res = await fetch(nextUrl, {
         headers: {
-          "X-Shopify-Access-Token": this.accessToken,
+          "X-Shopify-Access-Token": token,
           Accept: "application/json",
         },
       });
@@ -261,6 +354,68 @@ export class ShopifyClient {
     const shop = active.find((l) => l.name === "Shop location") ?? active[0];
     this._locationId = String(shop.id);
     return this._locationId;
+  }
+
+  // ── Orders API ────────────────────────────────────────────────────────────
+
+  /**
+   * Fetch recent orders. Defaults to unfulfilled orders.
+   */
+  async getOrders(opts?: {
+    status?: "open" | "closed" | "cancelled" | "any";
+    fulfillment_status?: "shipped" | "partial" | "unshipped" | "any" | "unfulfilled";
+    financial_status?: "authorized" | "pending" | "paid" | "partially_paid" | "refunded" | "voided" | "any";
+    limit?: number;
+    since_id?: string;
+    created_at_min?: string;
+  }): Promise<ShopifyOrder[]> {
+    const params = new URLSearchParams();
+    params.set("status", opts?.status ?? "any");
+    if (opts?.fulfillment_status) params.set("fulfillment_status", opts.fulfillment_status);
+    if (opts?.financial_status) params.set("financial_status", opts.financial_status);
+    params.set("limit", String(opts?.limit ?? 50));
+    if (opts?.since_id) params.set("since_id", opts.since_id);
+    if (opts?.created_at_min) params.set("created_at_min", opts.created_at_min);
+
+    const { data } = await this.request<{ orders: ShopifyOrder[] }>(
+      "GET",
+      `orders.json?${params.toString()}`
+    );
+
+    return data.orders;
+  }
+
+  /**
+   * Fetch a single order by ID.
+   */
+  async getOrder(orderId: string | number): Promise<ShopifyOrder> {
+    const { data } = await this.request<{ order: ShopifyOrder }>(
+      "GET",
+      `orders/${orderId}.json`
+    );
+    return data.order;
+  }
+
+  /**
+   * Register a webhook with Shopify.
+   */
+  async registerWebhook(topic: string, address: string, format: "json" | "xml" = "json"): Promise<{ id: number }> {
+    const { data } = await this.request<{
+      webhook: { id: number; topic: string; address: string };
+    }>("POST", "webhooks.json", {
+      webhook: { topic, address, format },
+    });
+    return { id: data.webhook.id };
+  }
+
+  /**
+   * List all registered webhooks.
+   */
+  async listWebhooks(): Promise<Array<{ id: number; topic: string; address: string }>> {
+    const { data } = await this.request<{
+      webhooks: Array<{ id: number; topic: string; address: string }>;
+    }>("GET", "webhooks.json");
+    return data.webhooks;
   }
 }
 
