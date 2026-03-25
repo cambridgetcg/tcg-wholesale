@@ -1,16 +1,16 @@
 /**
  * POST /api/cron/stock-correct
  *
- * Reverse a shopify order's stock adjustments (undo a decrement).
+ * Manual stock adjustments by SKU.
  * Auth: CRON_SECRET
  *
- * Body: { "reverse_order": 1185 }
+ * Body: { "adjustments": [{ "sku": "...", "delta": -2 }, ...], "note": "reason" }
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { cards, stockAdjustments } from "@/lib/db/schema";
-import { eq, sql, and } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 function authorizeCron(req: NextRequest): boolean {
   if (req.headers.get("x-vercel-cron") === "true") return true;
@@ -27,62 +27,61 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const orderNumber = body.reverse_order;
+  const adjustmentList = body.adjustments as Array<{ sku: string; delta: number }> | undefined;
+  const note = body.note || "manual-correction";
 
-  if (!orderNumber) {
-    return NextResponse.json({ error: "Missing reverse_order" }, { status: 400 });
+  if (!adjustmentList || !Array.isArray(adjustmentList) || adjustmentList.length === 0) {
+    return NextResponse.json({ error: "Missing adjustments array" }, { status: 400 });
   }
 
-  const orderRef = `shopify-#${orderNumber}`;
+  const results: Array<{ sku: string; cardId: number; prev: number; new: number; delta: number }> = [];
+  const errors: Array<{ sku: string; error: string }> = [];
 
-  // Find all adjustments for this order
-  const adjustments = await db
-    .select({
-      id: stockAdjustments.id,
-      cardId: stockAdjustments.cardId,
-      delta: stockAdjustments.delta,
-    })
-    .from(stockAdjustments)
-    .where(eq(stockAdjustments.note, orderRef));
+  for (const adj of adjustmentList) {
+    if (!adj.sku || typeof adj.delta !== "number") {
+      errors.push({ sku: adj.sku || "unknown", error: "Invalid sku or delta" });
+      continue;
+    }
 
-  if (adjustments.length === 0) {
-    return NextResponse.json({ error: `No adjustments found for ${orderRef}` }, { status: 404 });
-  }
+    try {
+      const [card] = await db
+        .select({ id: cards.id, stock: cards.stock })
+        .from(cards)
+        .where(eq(cards.sku, adj.sku))
+        .limit(1);
 
-  const results: Array<{ cardId: number; reversed_delta: number }> = [];
+      if (!card) {
+        errors.push({ sku: adj.sku, error: "Card not found" });
+        continue;
+      }
 
-  for (const adj of adjustments) {
-    if (adj.delta === 0) continue; // nothing to reverse
+      const prevStock = card.stock;
+      const newStock = Math.max(0, prevStock + adj.delta);
 
-    const reverseDelta = -adj.delta; // flip the sign
+      await db
+        .update(cards)
+        .set({ stock: sql`greatest(${cards.stock} + ${adj.delta}, 0)` })
+        .where(eq(cards.id, card.id));
 
-    // Add stock back
-    await db
-      .update(cards)
-      .set({ stock: sql`${cards.stock} + ${reverseDelta}` })
-      .where(eq(cards.id, adj.cardId));
+      await db.insert(stockAdjustments).values({
+        cardId: card.id,
+        delta: adj.delta,
+        reason: "correction",
+        channel: "manual",
+        note,
+      });
 
-    // Log the reversal
-    await db.insert(stockAdjustments).values({
-      cardId: adj.cardId,
-      delta: reverseDelta,
-      reason: "correction",
-      channel: "shopify-cambridge",
-      note: `reversal-${orderRef}`,
-    });
-
-    results.push({ cardId: adj.cardId, reversed_delta: reverseDelta });
-  }
-
-  // Delete the original adjustments so the order can be re-processed if needed
-  for (const adj of adjustments) {
-    await db.delete(stockAdjustments).where(eq(stockAdjustments.id, adj.id));
+      results.push({ sku: adj.sku, cardId: card.id, prev: prevStock, new: newStock, delta: adj.delta });
+    } catch (err) {
+      errors.push({ sku: adj.sku, error: err instanceof Error ? err.message : String(err) });
+    }
   }
 
   return NextResponse.json({
-    order_ref: orderRef,
-    reversed: results.length,
-    skipped_zero: adjustments.length - results.length,
+    note,
+    processed: results.length,
+    errors: errors.length,
     results,
+    ...(errors.length > 0 && { error_details: errors }),
   });
 }
