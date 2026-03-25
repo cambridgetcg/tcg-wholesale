@@ -609,9 +609,9 @@ async function main() {
 
     console.log(`\n  Inserted purchase id=${purchase.id}`);
 
-    // Split resolved items into Mint (auto-match) and A- (needs review)
-    const mintItems = resolved.filter((r) => !r.condition.startsWith("状態"));
-    const reviewItems = resolved.filter((r) => r.condition.startsWith("状態"));
+    // All items count toward stock (A- treated same as Mint)
+    const mintItems = resolved;
+    const reviewItems: ResolvedItem[] = [];
 
     // Insert all purchase items (both Mint and A-)
     for (const item of resolved) {
@@ -621,7 +621,7 @@ async function main() {
                 ${item.unitPriceJpy}, ${item.cardrushUrl})
       `;
       const oiTag = item.orderItemId ? ` → oi=${item.orderItemId}` : "";
-      const reviewTag = item.condition.startsWith("状態") ? " ⚠ FOR REVIEW" : "";
+      const reviewTag = "";
       console.log(`    ${item.cardNumber} x${item.quantity} (${item.condition}) → card_id=${item.cardId}${oiTag}${reviewTag}`);
     }
 
@@ -635,7 +635,7 @@ async function main() {
     // Sync UK stock + pending stock — only Mint items affect stock counts
     const cardIds = mintItems.map((r) => r.cardId);
     if (cardIds.length > 0) {
-      // On-hand: only received purchases minus fulfilled (exclude A- condition)
+      // On-hand: received purchases minus fulfilled (all conditions counted)
       await sql`
         UPDATE cards c
         SET stock = COALESCE(uk.qty, 0)
@@ -648,12 +648,12 @@ async function main() {
             ), 0)::int AS qty
           FROM purchase_items pi
           JOIN purchases pu ON pu.id = pi.purchase_id
-          WHERE pu.status = 'received' AND pi.condition NOT LIKE '状態%'
+          WHERE pu.status = 'received'
           GROUP BY pi.card_id
         ) uk
         WHERE c.id = uk.card_id AND c.id = ANY(${cardIds})
       `;
-      // Pending: ordered/shipped but not received (exclude A- condition)
+      // Pending: ordered/shipped but not received (all conditions counted)
       await sql`
         UPDATE cards c
         SET pending_stock = COALESCE(pk.qty, 0)
@@ -661,7 +661,7 @@ async function main() {
           SELECT pi.card_id, SUM(pi.quantity)::int AS qty
           FROM purchase_items pi
           JOIN purchases pu ON pu.id = pi.purchase_id
-          WHERE pu.status IN ('ordered', 'shipped') AND pi.condition NOT LIKE '状態%'
+          WHERE pu.status IN ('ordered', 'shipped')
           GROUP BY pi.card_id
         ) pk
         WHERE c.id = pk.card_id AND c.id = ANY(${cardIds})
