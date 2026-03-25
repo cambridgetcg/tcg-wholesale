@@ -8,7 +8,7 @@ import {
 
 /** Paths that never require authentication. */
 // /api/v1/ uses its own Bearer token auth (channel_api_keys table)
-const PUBLIC_PATHS = ["/login", "/api/auth", "/api/v1"];
+const PUBLIC_PATHS = ["/login", "/api/auth", "/api/v1", "/api/cron", "/api/webhooks"];
 
 /** Storefront-only page prefixes (blocked on admin domain). */
 const STOREFRONT_PAGE_PREFIXES = ["/catalog", "/orders", "/margin", "/fulfillment"];
