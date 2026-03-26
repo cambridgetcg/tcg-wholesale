@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       const game = await db
         .select({ id: games.id })
         .from(games)
-        .where(eq(games.code, gameCode))
+        .where(or(eq(games.code, gameCode), eq(games.slug, gameCode)))
         .limit(1);
       if (!game.length) {
         return NextResponse.json({ error: `Game not found: ${gameCode}` }, { status: 404 });

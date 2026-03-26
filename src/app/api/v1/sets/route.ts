@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { sets, cards, games } from "@/lib/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, or } from "drizzle-orm";
 import { authenticateApiKey, unauthorized } from "../auth";
 
 export async function GET(req: NextRequest) {
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       const game = await db
         .select({ id: games.id })
         .from(games)
-        .where(eq(games.code, gameCode))
+        .where(or(eq(games.code, gameCode), eq(games.slug, gameCode)))
         .limit(1);
       if (!game.length) {
         return NextResponse.json({ error: `Game not found: ${gameCode}` }, { status: 404 });
