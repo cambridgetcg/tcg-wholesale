@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { cards, games } from "@/lib/db/schema";
 import { eq, gte, and, sql, gt, ilike, or, asc, desc } from "drizzle-orm";
 import { authenticateApiKey, unauthorized } from "../auth";
+import { priceForChannel } from "@/lib/channel-pricing";
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,6 +15,9 @@ export async function GET(req: NextRequest) {
     // Pagination
     const limit = Math.min(Math.max(parseInt(params.get("limit") || "48", 10) || 48, 1), 500);
     const offset = Math.max(parseInt(params.get("offset") || "0", 10) || 0, 0);
+
+    // Channel param (default: wholesale)
+    const channel = params.get("channel") || "wholesale";
 
     // Existing filters
     const gameCode = params.get("game");
@@ -101,12 +105,15 @@ export async function GET(req: NextRequest) {
       .from(cards)
       .where(where);
 
-    // Fetch page
+    // Fetch page (include cardrushJpy + gbpJpyRate for channel pricing)
     const rows = await db
       .select({
         sku: cards.sku,
         cardNumber: cards.cardNumber,
         priceGbp: cards.price,
+        cardrushJpy: cards.cardrushJpy,
+        gbpJpyRate: cards.gbpJpyRate,
+        cardCategory: cards.category,
         stock: cards.stock,
         pendingStock: cards.pendingStock,
         imageUrl: cards.imageUrl,
@@ -124,27 +131,43 @@ export async function GET(req: NextRequest) {
       .limit(limit)
       .offset(offset);
 
+    // Compute channel prices if non-wholesale channel requested
+    const needsChannelPrice = channel !== "wholesale";
+    const items = await Promise.all(
+      rows.map(async (r) => {
+        let channelPrice: number | null = null;
+        if (needsChannelPrice && r.cardrushJpy && r.gbpJpyRate) {
+          const breakdown = await priceForChannel(r.cardrushJpy, r.gbpJpyRate, channel, r.cardCategory);
+          channelPrice = breakdown.price;
+        }
+
+        return {
+          sku: r.sku,
+          card_number: r.cardNumber,
+          price_gbp: r.priceGbp,
+          ...(needsChannelPrice && { channel_price: channelPrice ?? r.priceGbp }),
+          ...(needsChannelPrice && { channel }),
+          stock: r.stock,
+          pending_stock: r.pendingStock,
+          image_url: r.imageUrl,
+          name: r.nameEn || r.name,
+          name_en: r.nameEn,
+          set_code: r.setCode,
+          set_name: r.setName,
+          rarity: r.rarity,
+          category: r.category,
+          updated_at: r.updatedAt,
+        };
+      }),
+    );
+
     return NextResponse.json({
       total,
       count: rows.length,
       limit,
       offset,
-      channel: apiKey.channel,
-      items: rows.map((r) => ({
-        sku: r.sku,
-        card_number: r.cardNumber,
-        price_gbp: r.priceGbp,
-        stock: r.stock,
-        pending_stock: r.pendingStock,
-        image_url: r.imageUrl,
-        name: r.nameEn || r.name,
-        name_en: r.nameEn,
-        set_code: r.setCode,
-        set_name: r.setName,
-        rarity: r.rarity,
-        category: r.category,
-        updated_at: r.updatedAt,
-      })),
+      channel: needsChannelPrice ? channel : apiKey.channel,
+      items,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

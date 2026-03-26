@@ -14,6 +14,7 @@ import { db } from "@/lib/db";
 import { cards } from "@/lib/db/schema";
 import { eq, isNull, inArray, isNotNull, and } from "drizzle-orm";
 import { ShopifyClient, type CardForShopify } from "@/lib/shopify-client";
+import { priceForChannel } from "@/lib/channel-pricing";
 
 export interface SyncOptions {
   mode: "full" | "prices" | "stock" | "create-missing";
@@ -66,6 +67,9 @@ export async function runShopifySync(options: SyncOptions): Promise<SyncResult> 
       setName: cards.setName,
       rarity: cards.rarity,
       price: cards.price,
+      cardrushJpy: cards.cardrushJpy,
+      gbpJpyRate: cards.gbpJpyRate,
+      category: cards.category,
       imageUrl: cards.imageUrl,
       stock: cards.stock,
       shopifyProductId: cards.shopifyProductId,
@@ -94,9 +98,15 @@ export async function runShopifySync(options: SyncOptions): Promise<SyncResult> 
     await sleep(REQUEST_DELAY_MS);
 
     for (const card of missing) {
-      // Skip cards with no price
-      if (!card.price || card.price <= 0) {
-        console.log(`[shopify-sync] Skipping ${card.sku}: no price`);
+      // Compute Shopify channel price from JPY source data
+      let shopifyPrice: number;
+      if (card.cardrushJpy && card.gbpJpyRate) {
+        const breakdown = await priceForChannel(card.cardrushJpy, card.gbpJpyRate, "shopify", card.category);
+        shopifyPrice = breakdown.price;
+      } else if (card.price && card.price > 0) {
+        shopifyPrice = card.price; // fallback to stored wholesale price
+      } else {
+        console.log(`[shopify-sync] Skipping ${card.sku}: no price data`);
         continue;
       }
 
@@ -108,7 +118,7 @@ export async function runShopifySync(options: SyncOptions): Promise<SyncResult> 
         setCode: card.setCode,
         setName: card.setName,
         rarity: card.rarity,
-        price: card.price,
+        price: shopifyPrice,
         imageUrl: card.imageUrl,
         stock: card.stock,
       };
@@ -167,11 +177,20 @@ export async function runShopifySync(options: SyncOptions): Promise<SyncResult> 
       if (!card.shopifyVariantId || card.price === null) continue;
 
       try {
+        // Compute Shopify channel price from JPY source data
+        let targetPrice: number;
+        if (card.cardrushJpy && card.gbpJpyRate) {
+          const breakdown = await priceForChannel(card.cardrushJpy, card.gbpJpyRate, "shopify", card.category);
+          targetPrice = breakdown.price;
+        } else {
+          targetPrice = card.price; // fallback to stored wholesale price
+        }
+
         const currentShopifyPrice = shopifyBySku.get(card.shopifyVariantId)?.price;
 
         const priceDiff =
           currentShopifyPrice !== undefined
-            ? Math.abs(card.price - currentShopifyPrice)
+            ? Math.abs(targetPrice - currentShopifyPrice)
             : Infinity;
 
         if (priceDiff <= 0.01 && currentShopifyPrice !== undefined) {
@@ -181,13 +200,13 @@ export async function runShopifySync(options: SyncOptions): Promise<SyncResult> 
 
         if (dryRun) {
           console.log(
-            `[shopify-sync] [dry-run] Would update price ${card.sku}: ${currentShopifyPrice?.toFixed(2) ?? "?"} → £${card.price.toFixed(2)}`
+            `[shopify-sync] [dry-run] Would update price ${card.sku}: ${currentShopifyPrice?.toFixed(2) ?? "?"} → £${targetPrice.toFixed(2)}`
           );
           result.pricesUpdated++;
           continue;
         }
 
-        await client.updatePrice(card.shopifyVariantId, card.price);
+        await client.updatePrice(card.shopifyVariantId, targetPrice);
         await sleep(REQUEST_DELAY_MS);
 
         await db
@@ -196,7 +215,7 @@ export async function runShopifySync(options: SyncOptions): Promise<SyncResult> 
           .where(eq(cards.id, card.id));
 
         result.pricesUpdated++;
-        console.log(`[shopify-sync] Updated price ${card.sku} → £${card.price.toFixed(2)}`);
+        console.log(`[shopify-sync] Updated price ${card.sku} → £${targetPrice.toFixed(2)}`);
       } catch (err) {
         result.errors++;
         const msg = err instanceof Error ? err.message : String(err);

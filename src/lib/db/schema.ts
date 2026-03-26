@@ -321,9 +321,44 @@ export const channelApiKeys = pgTable("channel_api_keys", {
   lastUsedAt: timestamp("last_used_at"),
 });
 
+export const channelPricing = pgTable("channel_pricing", {
+  id: serial("id").primaryKey(),
+  channel: text("channel").notNull().unique(),
+  label: text("label").notNull(),
+  description: text("description"),
+  marginMultiplier: customType<{ data: number; driverData: string }>({
+    dataType() { return "numeric(6, 4)"; },
+    fromDriver(value: string): number { return Number(value); },
+  })("margin_multiplier").default(1.08),
+  flatFeeSingles: customType<{ data: number; driverData: string }>({
+    dataType() { return "numeric(8, 2)"; },
+    fromDriver(value: string): number { return Number(value); },
+  })("flat_fee_singles").default(0.22),
+  flatFeeSealed: customType<{ data: number; driverData: string }>({
+    dataType() { return "numeric(8, 2)"; },
+    fromDriver(value: string): number { return Number(value); },
+  })("flat_fee_sealed").default(2.20),
+  vatMultiplier: customType<{ data: number; driverData: string }>({
+    dataType() { return "numeric(5, 4)"; },
+    fromDriver(value: string): number { return Number(value); },
+  })("vat_multiplier").default(1.20),
+  retailMultiplier: customType<{ data: number; driverData: string }>({
+    dataType() { return "numeric(5, 4)"; },
+    fromDriver(value: string): number { return Number(value); },
+  })("retail_multiplier").default(1.00),
+  roundTo: customType<{ data: number; driverData: string }>({
+    dataType() { return "numeric(4, 2)"; },
+    fromDriver(value: string): number { return Number(value); },
+  })("round_to").default(0.01),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+});
+
 export type Purchase = typeof purchases.$inferSelect;
 export type PurchaseItem = typeof purchaseItems.$inferSelect;
 export type WantedCard = typeof wantedCards.$inferSelect;
 export type StockTarget = typeof stockTargets.$inferSelect;
 export type StockAdjustment = typeof stockAdjustments.$inferSelect;
 export type ChannelApiKey = typeof channelApiKeys.$inferSelect;
+export type ChannelPricingRow = typeof channelPricing.$inferSelect;
