@@ -1,5 +1,26 @@
 // Download card images from CardRush and upload to S3
 // Skips images that already exist in the bucket (one-time operation)
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚠️  HIRES IMAGE PROTECTION — DO NOT MODIFY WITHOUT READING THIS ⚠️
+//
+// High-res images live at: s3://jp-op-photos/hires/{SET}/{SKU}.jpg
+// They were scraped directly from Cardrush product pages (100–200KB each).
+// These are the SOURCE OF TRUTH for card images on wholesaletcgdirect.com.
+//
+// RULES:
+//  1. uploadImagesToS3() ALWAYS calls objectExists() before writing — never
+//     overwrites a key that already exists in S3.
+//  2. The scrape-cardrush.ts DB upsert uses a CASE guard that preserves any
+//     image_url containing '/hires/' — price scrapes never clobber hi-res URLs.
+//  3. This s3Key() function MUST stay in sync with scrape-all-onepiece-hires.py
+//     which uses: hires/{SET_CODE}/{SKU}.jpg
+//  4. If you add a new image pipeline, write to a different prefix — never
+//     overwrite hires/*.
+//
+// To restore hi-res URLs in DB from manifest:
+//   python3 cambridge-tcg-site/web/tradein/scripts/scrape-all-onepiece-hires.py
+// ─────────────────────────────────────────────────────────────────────────────
 
 import {
   S3Client,
@@ -11,6 +32,8 @@ import type { WholesaleCard } from "./cardrush-mapper";
 
 const DEFAULT_BUCKET = "jp-op-photos";
 const REGION = "us-east-1";
+// Prefix for hi-res images — must match scrape-all-onepiece-hires.py
+const HIRES_PREFIX = "hires";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -22,13 +45,18 @@ function getS3Client(): S3Client {
 }
 
 // S3 key: hires/{SET_CODE}/{SKU}.jpg  e.g. hires/OP01/OP-OP01-001-JP-V11L2.jpg
-// Matches the output of scrape-all-onepiece-hires.py (full SKU, .jpg, hires/ prefix)
+// MUST stay in sync with scrape-all-onepiece-hires.py
 function s3Key(card: WholesaleCard): string {
-  return `hires/${card.setCode}/${card.sku}.jpg`;
+  return `${HIRES_PREFIX}/${card.setCode}/${card.sku}.jpg`;
 }
 
 export function s3ImageUrl(card: WholesaleCard, bucket: string = DEFAULT_BUCKET): string {
   return `https://${bucket}.s3.${REGION}.amazonaws.com/${s3Key(card)}`;
+}
+
+/** Returns true if this URL points to the hi-res S3 store (never overwrite). */
+export function isHiResUrl(url: string | null | undefined): boolean {
+  return !!url && url.includes(`/${HIRES_PREFIX}/`);
 }
 
 async function objectExists(s3: S3Client, key: string, bucket: string): Promise<boolean> {
@@ -76,7 +104,9 @@ export async function uploadImagesToS3(
       continue;
     }
 
-    // Skip if already in S3
+    // ⚠️ HIRES GUARD: never overwrite an existing hi-res object in S3
+    // Once uploaded, these images are permanent. Re-run scrape-all-onepiece-hires.py
+    // if you need to refresh a specific image (it will skip already-uploaded keys).
     if (await objectExists(s3, key, bucket)) {
       skipped++;
       continue;
