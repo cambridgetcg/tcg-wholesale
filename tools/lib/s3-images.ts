@@ -21,9 +21,10 @@ function getS3Client(): S3Client {
   return new S3Client({ region: REGION });
 }
 
-// S3 key: {SET_CODE}/{SKU}.jpeg  e.g. OP01/OP-OP01-001-JP.jpeg
+// S3 key: hires/{SET_CODE}/{SKU}.jpg  e.g. hires/OP01/OP-OP01-001-JP-V11L2.jpg
+// Matches the output of scrape-all-onepiece-hires.py (full SKU, .jpg, hires/ prefix)
 function s3Key(card: WholesaleCard): string {
-  return `${card.setCode}/${card.sku}.jpeg`;
+  return `hires/${card.setCode}/${card.sku}.jpg`;
 }
 
 export function s3ImageUrl(card: WholesaleCard, bucket: string = DEFAULT_BUCKET): string {

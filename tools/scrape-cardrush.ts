@@ -296,7 +296,11 @@ async function upsertToDb(
           game_id = EXCLUDED.game_id,
           set_id = EXCLUDED.set_id,
           rarity = EXCLUDED.rarity,
-          image_url = EXCLUDED.image_url`;
+          image_url = CASE
+            WHEN EXCLUDED.image_url LIKE '%/hires/%' THEN EXCLUDED.image_url
+            WHEN cards.image_url LIKE '%/hires/%' THEN cards.image_url
+            ELSE EXCLUDED.image_url
+          END`;
 
       // Batch select card IDs by SKU
       const skus = batch.map((c) => c.sku);
@@ -509,7 +513,11 @@ async function upsertSealedToDb(
           last_synced_at = EXCLUDED.last_synced_at,
           game_id = EXCLUDED.game_id,
           set_id = EXCLUDED.set_id,
-          image_url = EXCLUDED.image_url`;
+          image_url = CASE
+            WHEN EXCLUDED.image_url LIKE '%/hires/%' THEN EXCLUDED.image_url
+            WHEN cards.image_url LIKE '%/hires/%' THEN cards.image_url
+            ELSE EXCLUDED.image_url
+          END`;
 
       // Price history
       const skus = batch.map((c) => c.sku);
