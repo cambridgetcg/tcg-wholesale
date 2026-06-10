@@ -14,6 +14,7 @@ import {
 const mockFetch = vi.fn();
 
 beforeEach(() => {
+  mockFetch.mockClear();
   vi.stubGlobal("fetch", mockFetch);
   _resetTokenCache();
 
@@ -133,11 +134,12 @@ describe("bulkPushListings", () => {
     }
 
     // Each item = 3 fetch calls (PUT inventory, GET offer, POST offer)
-    // + 1 token call (cached after first)
-    // Batch 1: 1 token + 25*3 = 76 calls
-    // Batch 2: 5*3 = 15 calls
-    // Total: 91
-    expect(mockFetch.mock.calls.length).toBe(91);
+    // + token calls: Promise.all in each batch means all items call
+    //   getAccessToken() concurrently — in batch 1 all 25 miss the cache.
+    // Batch 1: 25 token + 25*3 = 100 calls
+    // Batch 2: 0 token (cached) + 5*3 = 15 calls
+    // Total: 115
+    expect(mockFetch.mock.calls.length).toBe(115);
   });
 });
 
