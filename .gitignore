@@ -11,3 +11,6 @@ next-env.d.ts
 .vercel
 tools/logs/
 test-results/
+.env.vercel
+__pycache__/
+*.pyc
