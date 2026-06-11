@@ -1,0 +1,8 @@
+name: tcg-wholesale
+kind: venture
+layer: commerce
+owner_sister: none
+domain: commerce
+state: archived
+purpose: Standalone B2B wholesale platform — superseded by Cambridge-TCG-monorepo apps/wholesale.
+dependsOn: []
