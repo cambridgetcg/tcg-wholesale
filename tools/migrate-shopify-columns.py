@@ -19,7 +19,8 @@ import psycopg2.extras
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-DATABASE_URL = "postgresql://postgres:***REMOVED-ROTATE-ME***@tcg-wholesale.cn4c2su0o42n.us-east-1.rds.amazonaws.com:5432/wholesale?sslmode=require"
+# Connection string from the environment; never commit one.
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 SHOPIFY_STORE = os.environ.get("SHOPIFY_STORE", "6e824e-a9.myshopify.com")
 SHOPIFY_ACCESS_TOKEN = os.environ.get("SHOPIFY_ACCESS_TOKEN", "***REMOVED-ROTATE-ME***")
