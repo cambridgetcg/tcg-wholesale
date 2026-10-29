@@ -6,7 +6,8 @@ import psycopg2.extras
 import pandas as pd
 import streamlit as st
 
-DATABASE_URL = "postgresql://postgres:***REMOVED-ROTATE-ME***@tcg-wholesale.cn4c2su0o42n.us-east-1.rds.amazonaws.com:5432/wholesale?sslmode=require"
+# Connection string from the environment; never commit one.
+DATABASE_URL = os.environ["DATABASE_URL"]
 
 
 # ── Data loaders ────────────────────────────────────────────────────────────
